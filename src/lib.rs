@@ -3,7 +3,6 @@
 
 extern crate num_cpus;
 extern crate test;
-extern crate threadpool;
 
 #[cfg(test)]
 mod tests {
@@ -68,17 +67,13 @@ mod tests {
     #[bench]
     fn benchmark(b: &mut Bencher) {
         b.iter(|| {
-            let n = test::black_box(100);
-            (0..n).fold(100, |_, _| {
-                basic_test();
-                add_operator();
-                or_operator();
-                in_the_middle();
-                star_operator();
-                add_and_star_with_brackets();
-                return 0;
-            })
-        })
+            basic_test();
+            add_operator();
+            or_operator();
+            in_the_middle();
+            star_operator();
+            add_and_star_with_brackets();
+        });
     }
 }
 

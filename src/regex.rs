@@ -6,7 +6,6 @@ use super::utils::*;
 pub struct Regex {
     pub expr: String,
     pub tree: NodeMap,
-    pub multithreading: bool,
 }
 
 impl Default for Regex {
@@ -16,7 +15,6 @@ impl Default for Regex {
         return Regex {
             expr: String::from(""),
             tree: map,
-            multithreading: false,
         };
     }
 }
@@ -24,17 +22,13 @@ impl Default for Regex {
 impl Regex {
     pub fn new(mut regex: String) -> Self {
         let mut r = Self::default();
-        regex.push(')');
-        let mut new_regex = "(".to_string();
-        new_regex.push_str(&regex);
-        regex = new_regex;
         r.expr = regex;
         r.compile();
         return r;
     }
 
     fn compile(&mut self) {
-        fn change_transition(
+        fn add_character(
             c: char,
             exclude: bool,
             map: &mut NodeMap,
@@ -51,13 +45,22 @@ impl Regex {
                     _ => {}
                 }
             }
-            map.insert(map_index.clone(), Node::new_from_char(c, exclude, map_index.clone()));
+            map.insert(
+                map_index.clone(),
+                Node::new_from_char(c, exclude, map_index.clone()),
+            );
             if let Some(to_connect) = callstack.pop() {
                 let mut node = map.get(&to_connect).unwrap().clone();
                 match node {
-                    Node::Inclusive { ref mut children, .. }
-                    | Node::Exclusive { ref mut children, .. }
-                    | Node::Transition { ref mut children, .. } => {
+                    Node::Inclusive {
+                        ref mut children, ..
+                    }
+                    | Node::Exclusive {
+                        ref mut children, ..
+                    }
+                    | Node::Transition {
+                        ref mut children, ..
+                    } => {
                         children.push(map_index.clone());
                         map.insert(to_connect.clone(), node);
                     }
@@ -85,11 +88,51 @@ impl Regex {
                     let lookback = string[string_index - 1];
                     match lookback {
                         BACKSLASH => match character {
-                            BACKSLASH => change_transition(BACKSLASH, false, &mut map, &mut callstack, &mut map_index, &string, &string_index),
-                            CARET => change_transition(CARET, false, &mut map, &mut callstack, &mut map_index, &string, &string_index),
-                            DOLLAR => change_transition(DOLLAR, false, &mut map, &mut callstack, &mut map_index, &string, &string_index),
-                            'n' => change_transition('\n', false, &mut map, &mut callstack, &mut map_index, &string, &string_index),
-                            '+' | '*' => change_transition(character, false, &mut map, &mut callstack, &mut map_index, &string, &string_index),
+                            BACKSLASH => add_character(
+                                BACKSLASH,
+                                false,
+                                &mut map,
+                                &mut callstack,
+                                &mut map_index,
+                                &string,
+                                &string_index,
+                            ),
+                            CARET => add_character(
+                                CARET,
+                                false,
+                                &mut map,
+                                &mut callstack,
+                                &mut map_index,
+                                &string,
+                                &string_index,
+                            ),
+                            DOLLAR => add_character(
+                                DOLLAR,
+                                false,
+                                &mut map,
+                                &mut callstack,
+                                &mut map_index,
+                                &string,
+                                &string_index,
+                            ),
+                            'n' => add_character(
+                                '\n',
+                                false,
+                                &mut map,
+                                &mut callstack,
+                                &mut map_index,
+                                &string,
+                                &string_index,
+                            ),
+                            '+' | '*' => add_character(
+                                character,
+                                false,
+                                &mut map,
+                                &mut callstack,
+                                &mut map_index,
+                                &string,
+                                &string_index,
+                            ),
                             _ => {}
                         },
                         _ => panic!("Something has gone wrong here"),
@@ -122,10 +165,18 @@ impl Regex {
                             let old = callstack.pop().unwrap();
                             let mut to_connect = map.get(&old).unwrap().clone();
                             match to_connect {
-                                Node::Exclusive { ref mut children, .. }
-                                | Node::Inclusive { ref mut children, .. }
-                                | Node::Transition { ref mut children, .. }
-                                | Node::MatchAll { ref mut children, .. } => {
+                                Node::Exclusive {
+                                    ref mut children, ..
+                                }
+                                | Node::Inclusive {
+                                    ref mut children, ..
+                                }
+                                | Node::Transition {
+                                    ref mut children, ..
+                                }
+                                | Node::MatchAll {
+                                    ref mut children, ..
+                                } => {
                                     children.push(before_index);
                                 }
                                 _ => panic!("aah"),
@@ -141,10 +192,18 @@ impl Regex {
                             let current_node_index = callstack.last().unwrap();
                             let mut current_node = map.get(current_node_index).unwrap().clone();
                             match &mut current_node {
-                                Node::Transition { ref mut children, .. }
-                                | Node::Exclusive { ref mut children, .. }
-                                | Node::MatchAll { ref mut children, .. }
-                                | Node::Inclusive { ref mut children, .. } => {
+                                Node::Transition {
+                                    ref mut children, ..
+                                }
+                                | Node::Exclusive {
+                                    ref mut children, ..
+                                }
+                                | Node::MatchAll {
+                                    ref mut children, ..
+                                }
+                                | Node::Inclusive {
+                                    ref mut children, ..
+                                } => {
                                     children.push(after_index.clone());
                                 }
                                 _ => panic!("something went wrong"),
@@ -154,7 +213,9 @@ impl Regex {
                             let node = map.get(to_connect).unwrap();
                             let mut new_node = node.clone();
                             match new_node {
-                                Node::Transition { ref mut children, .. } => {
+                                Node::Transition {
+                                    ref mut children, ..
+                                } => {
                                     children.push(map_index);
                                 }
                                 _ => panic!("Expected transition node found something else"),
@@ -172,10 +233,18 @@ impl Regex {
                             let current_node_index = callstack.last().unwrap();
                             let mut current_node = map.get(current_node_index).unwrap().clone();
                             match &mut current_node {
-                                Node::Transition { ref mut children, .. }
-                                | Node::Exclusive { ref mut children, .. }
-                                | Node::MatchAll { ref mut children, .. }
-                                | Node::Inclusive { ref mut children, .. } => {
+                                Node::Transition {
+                                    ref mut children, ..
+                                }
+                                | Node::Exclusive {
+                                    ref mut children, ..
+                                }
+                                | Node::MatchAll {
+                                    ref mut children, ..
+                                }
+                                | Node::Inclusive {
+                                    ref mut children, ..
+                                } => {
                                     children.push(after_index.clone());
                                 }
                                 _ => panic!("something went wrong"),
@@ -191,7 +260,9 @@ impl Regex {
                                 let mut after = map.get(&node_index).unwrap().clone();
                                 let before_index = node_index - 1;
                                 match after {
-                                    Node::Transition { ref mut children, .. } => {
+                                    Node::Transition {
+                                        ref mut children, ..
+                                    } => {
                                         children.push(before_index);
                                     }
                                     _ => panic!("Addition Compile error"),
@@ -201,7 +272,12 @@ impl Regex {
                                 let x = callstack.last().unwrap();
                                 let mut node = map.get(x).unwrap().clone();
                                 match node {
-                                    Node::Inclusive { ref mut children, .. } | Node::Exclusive { ref mut children, .. } => {
+                                    Node::Inclusive {
+                                        ref mut children, ..
+                                    }
+                                    | Node::Exclusive {
+                                        ref mut children, ..
+                                    } => {
                                         children.push(x.clone());
                                     }
                                     _ => panic!("Addition Compile error"),
@@ -216,7 +292,9 @@ impl Regex {
                                 let mut after = map.get(&node_index).unwrap().clone();
                                 let before_index = node_index - 1;
                                 match after {
-                                    Node::Transition { ref mut children, .. } => {
+                                    Node::Transition {
+                                        ref mut children, ..
+                                    } => {
                                         children.push(before_index);
                                     }
                                     _ => panic!("Addition Compile error"),
@@ -255,7 +333,9 @@ impl Regex {
                                     _ => panic!("Something went wrong here"),
                                 };
                                 match new_transition {
-                                    Node::Transition { ref mut children, .. } => {
+                                    Node::Transition {
+                                        ref mut children, ..
+                                    } => {
                                         children.push(node_index + 1);
                                     }
                                     _ => panic!("Something went wrong here"),
@@ -265,9 +345,25 @@ impl Regex {
                                 map_index += 1;
                             }
                         }
-                        CARET | DOLLAR => change_transition('\n', false, &mut map, &mut callstack, &mut map_index, &string, &string_index),
+                        CARET | DOLLAR => add_character(
+                            '\n',
+                            false,
+                            &mut map,
+                            &mut callstack,
+                            &mut map_index,
+                            &string,
+                            &string_index,
+                        ),
                         _ => {
-                            change_transition(character, false, &mut map, &mut callstack, &mut map_index, &string, &string_index);
+                            add_character(
+                                character,
+                                false,
+                                &mut map,
+                                &mut callstack,
+                                &mut map_index,
+                                &string,
+                                &string_index,
+                            );
                         }
                     }
                 }
@@ -277,10 +373,26 @@ impl Regex {
             let mut x = map.get(callstack.last().unwrap()).unwrap().clone();
             match x {
                 Node::End => {}
-                Node::Exclusive { ref mut children, index, .. }
-                | Node::Inclusive { ref mut children, index, .. }
-                | Node::Transition { ref mut children, index, .. }
-                | Node::MatchAll { ref mut children, index, .. } => {
+                Node::Exclusive {
+                    ref mut children,
+                    index,
+                    ..
+                }
+                | Node::Inclusive {
+                    ref mut children,
+                    index,
+                    ..
+                }
+                | Node::Transition {
+                    ref mut children,
+                    index,
+                    ..
+                }
+                | Node::MatchAll {
+                    ref mut children,
+                    index,
+                    ..
+                } => {
                     children.push(map_index);
                     map.insert(index, x);
                 }
@@ -290,7 +402,14 @@ impl Regex {
             return (map, map_index, string_index);
         }
         // println!("compiling");
-        let (new_tree, _, _) = parse(self.tree.clone(), str_to_char_vec(self.expr.as_str()), 1, &mut vec![0], &mut vec![0], 0);
+        let (new_tree, _, _) = parse(
+            self.tree.clone(),
+            str_to_char_vec(self.expr.as_str()),
+            1,
+            &mut vec![0, 0],
+            &mut vec![0],
+            0,
+        );
         self.tree = new_tree;
     }
 }
