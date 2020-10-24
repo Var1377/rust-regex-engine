@@ -1,89 +1,60 @@
 use std::collections::*;
 
-pub type NodeMap = BTreeMap<usize, Node>;
+// surprisingly much quicker than  a regular HashMap
+pub type NodeMap = HashMap<usize, Node>;
 
 #[derive(Clone, Debug)]
 pub enum Node {
-    Inclusive {
-        children: Vec<usize>,
-        characters: Vec<char>,
-        index: usize,
-    },
-    Exclusive {
-        children: Vec<usize>,
-        characters: Vec<char>,
-        index: usize,
-    },
+    Inclusive { children: Vec<usize>, characters: Vec<char> },
+    Exclusive { children: Vec<usize>, characters: Vec<char> },
     End,
-    MatchAll {
-        children: Vec<usize>,
-        index: usize,
-    },
-    Transition {
-        children: Vec<usize>,
-        index: usize,
-    },
+    MatchAll { children: Vec<usize> },
+    Transition { children: Vec<usize> },
+    BeginningOfLine { children: Vec<usize> },
+    EndOfLine { children: Vec<usize> },
+    MatchOne { children: Vec<usize>, character: char },
 }
 
 impl Node {
-    pub fn new_transition(index: usize) -> Self {
-        return Node::Transition {
-            children: vec![],
-            index: index,
-        };
+    pub fn new_transition() -> Self {
+        return Node::Transition { children: vec![] };
     }
 
-    pub fn new(index: usize, exclude: bool) -> Self {
+    pub fn new(exclude: bool) -> Self {
         if exclude {
             Node::Exclusive {
                 children: vec![],
                 characters: vec![],
-                index: index,
             }
         } else {
             Node::Inclusive {
                 children: vec![],
                 characters: vec![],
-                index: index,
             }
         }
     }
 
-    pub fn new_match_all(index: usize) -> Self {
-        return Node::MatchAll {
+    pub fn new_match_all() -> Self {
+        return Node::MatchAll { children: vec![] };
+    }
+
+    pub fn new_from_char(c: char) -> Self {
+        return Node::MatchOne {
             children: vec![],
-            index: index,
+            character: c,
         };
     }
 
-    pub fn new_from_char(c: char, exclude: bool, index: usize) -> Self {
-        if exclude {
-            return Node::Exclusive {
-                children: vec![],
-                characters: vec![c],
-                index: index,
-            };
-        } else {
-            return Node::Inclusive {
-                children: vec![],
-                characters: vec![c],
-                index: index,
-            };
-        }
-    }
-
-    pub fn new_from_chars(chars: Vec<char>, exclude: bool, index: usize) -> Self {
+    pub fn new_from_chars(chars: Vec<char>, exclude: bool) -> Self {
         if exclude {
             return Node::Exclusive {
                 children: vec![],
                 characters: chars,
-                index: index,
             };
         } else {
             return Node::Inclusive {
                 children: vec![],
                 characters: chars,
-                index: index,
             };
         }
     }
