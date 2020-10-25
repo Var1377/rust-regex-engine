@@ -3,7 +3,7 @@ use super::regex::*;
 use super::utils::*;
 impl Regex {
     pub fn match_str(&self, string: &str) -> bool {
-        fn _match(map: &NodeMap, chars: &Vec<char>, node_index: usize, char_index: usize) -> bool {
+        fn _match(map: &NodeMap, chars: &[char], node_index: usize, char_index: usize) -> bool {
             let node = map.get(&node_index).unwrap();
             match node {
                 Node::Transition { children, .. } => {
@@ -15,10 +15,8 @@ impl Regex {
                     return false;
                 }
                 Node::Inclusive { characters, children, .. } => {
-                    if char_index > 0 {
-                        if char_index == chars.len() {
-                            return false;
-                        }
+                    if char_index == chars.len() {
+                        return false;
                     }
                     let to_match = chars[char_index];
                     if characters.contains(&to_match) {
@@ -36,10 +34,8 @@ impl Regex {
                     return true;
                 }
                 Node::Exclusive { characters, children, .. } => {
-                    if char_index > 0 {
-                        if char_index == chars.len() {
-                            return false;
-                        }
+                    if char_index == chars.len() {
+                        return false;
                     }
                     let to_match = chars[char_index];
                     if characters.contains(&to_match) {
@@ -54,10 +50,8 @@ impl Regex {
                     }
                 }
                 Node::MatchAll { children, .. } => {
-                    if char_index > 0 {
-                        if char_index == chars.len() {
-                            return false;
-                        }
+                    if char_index == chars.len() {
+                        return false;
                     }
                     let to_match = chars[char_index];
                     if to_match == '\n' {
@@ -73,7 +67,12 @@ impl Regex {
                 }
                 Node::EndOfLine { children, .. } => {
                     if char_index == chars.len() {
-                        return true;
+                        for child in children {
+                            if _match(map, chars, child.clone(), char_index) {
+                                return true;
+                            }
+                        }
+                        return false;
                     }
                     if chars[char_index] == '\n' {
                         {
@@ -109,13 +108,26 @@ impl Regex {
                     return false;
                 }
                 Node::MatchOne { character, children } => {
-                    if char_index > 0 {
-                        if char_index == chars.len() {
-                            return false;
-                        }
+                    if char_index == chars.len() {
+                        return false;
                     }
                     let to_match = chars[char_index];
-                    if to_match == character.clone() {
+                    if to_match == *character {
+                        for child in children {
+                            if _match(map, chars, child.clone(), char_index + 1) {
+                                return true;
+                            }
+                        }
+                        return false;
+                    }
+                    return false;
+                }
+                Node::NotMatchOne { character, children } => {
+                    if char_index == chars.len() {
+                        return false;
+                    }
+                    let to_match = chars[char_index];
+                    if to_match != *character {
                         for child in children {
                             if _match(map, chars, child.clone(), char_index + 1) {
                                 return true;

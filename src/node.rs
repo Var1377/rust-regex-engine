@@ -1,7 +1,8 @@
-use std::collections::*;
+// use std::collections::*;
+use fnv::FnvHashMap;
 
-// surprisingly much quicker than  a regular HashMap
-pub type NodeMap = HashMap<usize, Node>;
+// much quicker than a regular HashMap
+pub type NodeMap = FnvHashMap<usize, Node>;
 
 #[derive(Clone, Debug)]
 pub enum Node {
@@ -13,6 +14,7 @@ pub enum Node {
     BeginningOfLine { children: Vec<usize> },
     EndOfLine { children: Vec<usize> },
     MatchOne { children: Vec<usize>, character: char },
+    NotMatchOne { children: Vec<usize>, character: char },
 }
 
 impl Node {
@@ -38,11 +40,18 @@ impl Node {
         return Node::MatchAll { children: vec![] };
     }
 
-    pub fn new_from_char(c: char) -> Self {
-        return Node::MatchOne {
-            children: vec![],
-            character: c,
-        };
+    pub fn new_from_char(c: char, exclude: bool) -> Self {
+        if exclude {
+            return Node::NotMatchOne {
+                children: vec![],
+                character: c,
+            };
+        } else {
+            return Node::MatchOne {
+                children: vec![],
+                character: c,
+            };
+        }
     }
 
     pub fn new_from_chars(chars: Vec<char>, exclude: bool) -> Self {
@@ -57,5 +66,13 @@ impl Node {
                 characters: chars,
             };
         }
+    }
+
+    pub fn new_end_of_line() -> Self {
+        return Node::EndOfLine { children: Vec::new() };
+    }
+
+    pub fn new_start_of_line() -> Self {
+        return Node::BeginningOfLine { children: Vec::new() };
     }
 }
