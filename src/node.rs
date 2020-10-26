@@ -1,4 +1,3 @@
-
 #[derive(Clone, Debug)]
 pub enum Node {
     Inclusive { children: Vec<usize>, characters: Vec<char> },
@@ -16,7 +15,7 @@ impl Node {
     pub fn new_transition() -> Self {
         return Node::Transition { children: vec![] };
     }
-    
+
     pub fn new_match_all() -> Self {
         return Node::MatchAll { children: vec![] };
     }

@@ -238,11 +238,54 @@ mod tests {
         assert_eq!(r.match_str("aaabc"), false);
     }
 
+    #[test]
+    fn single_character_curly_brackets_both() {
+        let r = Regex::new("^a{4,6}b{2,4}c$");
+        // println!("{:?}", r.node_vec);
+        assert_eq!(r.match_str("aaaabbc"), true);
+        assert_eq!(r.match_str("abbbc"), false);
+    }
+
+    #[test]
+    fn brackets_curly_brackets () {
+        let r = Regex::new("(a|b|c){4}");
+        assert_eq!(r.match_str("abca"), true);
+        assert_eq!(r.match_str("aadbc"), false);
+    }
+
+    #[test]
+    fn brackets_curly_brackets_comma () {
+        let r = Regex::new("(a|b|c){4,}");
+        assert_eq!(r.match_str("abaaaaaaaaaaaaaacaad"), true);
+        assert_eq!(r.match_str("aadbc"), false);
+    }
+
+    #[test]
+    fn brackets_curly_brackets_both () {
+        let r = Regex::new("^(a|b|c){4,6}$");
+        assert_eq!(r.match_str("abcb"), true);
+        // assert_eq!(r.match_str("aab"), false);
+    }
+
+    #[test]
+    fn sq_brackets_curly_brackets () {
+        let r = Regex::new("[abc]{4}");
+        assert_eq!(r.match_str("abca"), true);
+        assert_eq!(r.match_str("aadbc"), false);
+    }
+
+    #[test]
+    fn sq_brackets_curly_brackets_comma () {
+        let r = Regex::new("[abc]{4,}");
+        assert_eq!(r.match_str("abaaaaaaaaaaaaaacaad"), true);
+        assert_eq!(r.match_str("aadbc"), false);
+    }
+
     #[bench]
     fn benchmark(b: &mut Bencher) {
         let phone = Regex::new(r"^\+*\(?[0-9]+\)?[-\s\.0-9]*$");
         b.iter(|| {
-            assert_eq!(phone.match_str("+447777666555"), true);
+            assert_eq!(phone.match_str("+447777-666-555"), true);
             assert_eq!(phone.match_str("test@gmail.com"), false);
         });
     }

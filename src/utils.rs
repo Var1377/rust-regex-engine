@@ -244,13 +244,19 @@ pub fn parse_curly_brackets(contents: &Vec::<char>, string: &mut Vec::<char>, st
     let pos_of_comma = contents.iter().position(|c| *c==',');
     if let Some(p) = pos_of_comma {
         if p == contents.len() -1 {
-            let mut s1 = String::from("");
+            let mut s1 = String::new();
             for i in 0..p {
                 s1.push(contents[i]);
             }
             let to_repeat = s1.parse::<usize>().unwrap();
             if previous_char_is_closing_bracket(string_index, string) {
-
+                let characters = get_enclosing_brackets_to_repeat(string, string_index - 1);
+                string.insert(*string_index, '+');
+                for _ in 0..to_repeat-1 {
+                    for character in &characters {
+                        string.insert(*string_index, *character);
+                    }
+                }
             } else {
                 string.insert(*string_index, '+');
                 let previous_character = string[*string_index-1];
@@ -258,8 +264,40 @@ pub fn parse_curly_brackets(contents: &Vec::<char>, string: &mut Vec::<char>, st
                     string.insert(*string_index, previous_character);
                 }
             }
-            // Ends in no number, up to x -> inf many times
         } else {
+            let mut s1 = String::new();
+                let mut s2 = String::new();
+                for i in 0..p {
+                    s1.push(contents[i])
+                }
+                for i in p+1..contents.len() {
+                    s2.push(contents[i]);
+                }
+                let int1 = s1.parse::<usize>().unwrap();
+                let int2 = s1.parse::<usize>().unwrap() - int1;
+            if previous_char_is_closing_bracket(string_index, string) {
+                let characters = get_enclosing_brackets_to_repeat(string, *string_index-1);
+                for _ in 0..int1-1 {
+                    for character in &characters {
+                        string.insert(*string_index, *character);
+                    }
+                }
+                for _ in 0..int2 {
+                    string.insert(*string_index, '?');
+                    for character in &characters {
+                        string.insert(*string_index, *character);
+                    }
+                }
+            } else {
+                let previous_character = string[*string_index-1];
+                for _ in 0..int1-1 {
+                    string.insert(*string_index, previous_character);
+                }
+                for _ in 0..int2 {
+                    string.insert(*string_index, '?');
+                    string.insert(*string_index, previous_character);
+                }
+            }
             // Ends in a number, x-> y times
         }
     } else {
@@ -270,9 +308,13 @@ pub fn parse_curly_brackets(contents: &Vec::<char>, string: &mut Vec::<char>, st
         println!("{}", s1);
         let to_repeat = s1.parse::<usize>().unwrap();
         if previous_char_is_closing_bracket(string_index, string) {
-
+            let characters = get_enclosing_brackets_to_repeat(string, string_index - 1);
+            for _ in 0..to_repeat-1 {
+                for character in &characters {
+                    string.insert(*string_index, *character);
+                }
+            }
         } else {
-            println!("{}", string_index);
             let previous_character = string[*string_index-1];
             for _ in 0..to_repeat-1 {
                 string.insert(*string_index, previous_character);
@@ -280,4 +322,44 @@ pub fn parse_curly_brackets(contents: &Vec::<char>, string: &mut Vec::<char>, st
         }
     }
     println!("{:?}", string);
+}
+
+fn get_enclosing_brackets_to_repeat(string: &[char], mut index: usize, ) -> Vec::<char> {
+    let mut s = vec![];
+    if string[index] == ')' {
+        let mut count = 0;
+        loop {
+            let character = string[index];
+            s.push(character);
+            if index == 0{
+                break
+            }
+            if string[index] == '('&&string[index-1]!=BACKSLASH {
+                count -= 1;
+            }
+            if string[index] == ')'&&string[index-1]!=BACKSLASH {
+                count += 1;
+            }
+            if count == 0 {
+                break;
+            }
+            index -= 1;
+        }
+    } else if string[index] == ']' {
+        loop {
+            let character = string[index];
+            s.push(character);
+            if index == 0 {
+                break;
+            }
+            if string[index] == '['&&string[index-1]!=BACKSLASH {
+                break
+            }
+            index -= 1;
+        }
+    } else {
+        println!("{}", string[index]);
+        panic!();
+    }
+    return s;
 }
