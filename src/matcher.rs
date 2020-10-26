@@ -3,8 +3,9 @@ use super::regex::*;
 use super::utils::*;
 impl Regex {
     pub fn match_str(&self, string: &str) -> bool {
-        fn _match(node_vec: &NodeMap, chars: &[char], node_index: &usize, char_index: usize) -> bool {
-            let node = node_vec.get(node_index).unwrap();
+        fn _match(node_vec: &[Node], chars: &[char], node_index: &usize, char_index: usize) -> bool {
+            let node: &Node;
+            unsafe {node = node_vec.get_unchecked(node_index.clone());};
             match node {
                 Node::Transition { children, .. } => {
                     for child in children {
@@ -139,9 +140,9 @@ impl Regex {
                 }
             }
         }
-        let mut chars = str_to_char_vec(string);
+        let chars = str_to_char_vec(string);
         for i in 0..chars.len() {
-            if _match(&self.tree, &chars, &0, i) {
+            if _match(&self.node_vec, &chars, &0, i) {
                 return true;
             }
         }

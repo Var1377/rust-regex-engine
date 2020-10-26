@@ -1,9 +1,6 @@
-#![allow(dead_code, unused_mut, soft_unstable, unused_variables)]
 #![feature(test, array_map, map_into_keys_values)]
 
 extern crate test;
-
-extern crate fnv;
 
 #[cfg(test)]
 mod tests {
@@ -13,7 +10,7 @@ mod tests {
 
     #[test]
     fn compile_test() {
-        let r = Regex::new("hi");
+        let _r = Regex::new("[^hi]");
     }
 
     #[test]
@@ -27,7 +24,7 @@ mod tests {
     #[test]
     fn add_operator() {
         let r = Regex::new("a+b");
-        // println!("{:?}", r.tree);
+        // println!("{:?}", r.node_vec);
         assert_eq!(r.match_str("ab"), true);
         assert_eq!(r.match_str("aaaaaaaaaaaaaaaaaaaaaaab"), true);
         assert_eq!(r.match_str("no"), false);
@@ -37,7 +34,7 @@ mod tests {
     fn or_operator() {
         // Won't work without brackets surrounding it
         let r = Regex::new("a|b|c");
-        // println!("{:?}", r.tree);
+        // println!("{:?}", r.node_vec);
         assert_eq!(r.match_str("ab"), true);
         assert_eq!(r.match_str("a"), true);
         assert_eq!(r.match_str("b"), true);
@@ -47,7 +44,7 @@ mod tests {
     #[test]
     fn in_the_middle() {
         let r = Regex::new("abc");
-        // println!("{:?}", r.tree);
+        // println!("{:?}", r.node_vec);
         assert_eq!(r.match_str("ksjfdweriwukjdkabcdkjaifejs"), true);
         assert_eq!(r.match_str("ksjfdweriwukjdkadkbjaiabfcejs"), false);
     }
@@ -55,7 +52,7 @@ mod tests {
     #[test]
     fn star_operator() {
         let r = Regex::new("abcd*e");
-        // println!("{:?}", r.tree);
+        // println!("{:?}", r.node_vec);
         assert_eq!(r.match_str("abcddddddddddddddddddddddddddde"), true);
         assert_eq!(r.match_str("abcddddddddddddddddddddddddddd"), false);
         assert_eq!(r.match_str("abce"), true);
@@ -64,7 +61,7 @@ mod tests {
     #[test]
     fn add_and_star_with_brackets() {
         let r = Regex::new("(a|b|c)*d(e|f|g)+h");
-        // println!("{:?}", r.tree);
+        // println!("{:?}", r.node_vec);
         assert_eq!(r.match_str("adgh"), true);
         assert_eq!(r.match_str("aaaaaadh"), false);
         assert_eq!(r.match_str("abcabcabacbacdfh"), true);
@@ -75,7 +72,7 @@ mod tests {
     #[test]
     fn bigger_brackets() {
         let r = Regex::new(r"(hello|hi|hey) there");
-        // println!("{:?}", r.tree);
+        // println!("{:?}", r.node_vec);
         assert_eq!(r.match_str("hello there"), true);
         assert_eq!(r.match_str("hi there"), true);
         assert_eq!(r.match_str("hey there"), true);
@@ -88,7 +85,7 @@ mod tests {
     #[test]
     fn square_brackets() {
         let r = Regex::new("abc[def]ghi");
-        println!("{:?}", r.tree);
+        // println!("{:?}", r.node_vec);
         assert_eq!(r.match_str("abcdghi"), true);
         assert_eq!(r.match_str("abceghi"), true);
         assert_eq!(r.match_str("abcfghi"), true);
@@ -99,7 +96,7 @@ mod tests {
     #[test]
     fn range_of_chars() {
         let r = Regex::new("[a-zA-Z]");
-        // println!("{:?}", r.tree);
+        // println!("{:?}", r.node_vec);
         assert_eq!(r.match_str("g"), true);
         assert_eq!(r.match_str("G"), true);
         assert_eq!(r.match_str("9"), false);
@@ -107,7 +104,7 @@ mod tests {
     #[test]
     fn range_of_chars_and_other() {
         let r = Regex::new("[a-zA-Z136]");
-        // println!("{:?}", r.tree);
+        // println!("{:?}", r.node_vec);
         assert_eq!(r.match_str("g"), true);
         assert_eq!(r.match_str("G"), true);
         assert_eq!(r.match_str("9"), false);
@@ -120,7 +117,7 @@ mod tests {
     #[test]
     fn square_brackets_with_quantifiers() {
         let r = Regex::new("[a-zA-Z136]+");
-        // println!("{:?}", r.tree);
+        // println!("{:?}", r.node_vec);
         assert_eq!(r.match_str("g13az"), true);
         assert_eq!(r.match_str("G6zA1"), true);
         assert_eq!(r.match_str("9254582"), false);
@@ -174,7 +171,7 @@ mod tests {
     #[test]
     fn question_mark() {
         let r = Regex::new("de?f");
-        println!("{:?}", r.tree);
+        // println!("{:?}", r.node_vec);
         assert_eq!(r.match_str("abcdefg"), true);
         assert_eq!(r.match_str("abcdfg"), true);
         assert_eq!(r.match_str("abcfge"), false);
@@ -196,7 +193,7 @@ mod tests {
     #[test]
     fn question_mark_with_square_brackets() {
         let r = Regex::new("abc[def]?hij");
-        // println!("{:?}", r.tree);
+        // println!("{:?}", r.node_vec);
         assert_eq!(r.match_str("abcdhij"), true);
         assert_eq!(r.match_str("abcehij"), true);
         assert_eq!(r.match_str("abcfhij"), true);
@@ -236,16 +233,17 @@ mod tests {
     #[test]
     fn single_character_curly_brackets_comma () {
         let r = Regex::new("^a{4,}b{2,}c$");
-        println!("{:?}", r.tree);
+        // println!("{:?}", r.node_vec);
         assert_eq!(r.match_str("aaaaaaaaaaaaabbc"), true);
         assert_eq!(r.match_str("aaabc"), false);
     }
 
     #[bench]
     fn benchmark(b: &mut Bencher) {
-        // To match a phone number
+        let phone = Regex::new(r"^\+*\(?[0-9]+\)?[-\s\.0-9]*$");
         b.iter(|| {
-            difficult_real_world_tests();
+            assert_eq!(phone.match_str("+447777666555"), true);
+            assert_eq!(phone.match_str("test@gmail.com"), false);
         });
     }
 }

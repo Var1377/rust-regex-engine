@@ -1,12 +1,12 @@
 use super::{
     constants::*,
-    node::{Node, NodeMap},
+    node::*,
     regex::Regex,
     utils::*,
 };
 
 impl Regex {
-    pub fn new(mut regex: &str) -> Self {
+    pub fn new(regex: &str) -> Self {
         let mut r = Self::default();
         r.expr = regex.to_string();
         r.parse_expression();
@@ -15,7 +15,7 @@ impl Regex {
     }
 
     fn parse_expression(&mut self) {
-        fn add_node(node: Node, map: &mut NodeMap, callstack: &mut Vec<usize>, map_index: &mut usize, chars: &Vec<char>, char_index: &usize) {
+        fn add_node(node: Node, node_vec: &mut Vec::<Node>, callstack: &mut Vec<usize>, chars: &Vec<char>, char_index: &usize) {
             if char_index > &0 {
                 let lookback = chars[char_index - 1];
                 match lookback {
@@ -23,9 +23,10 @@ impl Regex {
                     _ => {}
                 }
             }
-            map.insert(map_index.clone(), node);
+            node_vec.push(node);
+            let len = node_vec.len()-1;
             if let Some(to_connect) = callstack.pop() {
-                let mut node = map.get_mut(&to_connect).unwrap();
+                let node = node_vec.get_mut(to_connect).unwrap();
                 match node {
                     Node::Inclusive { ref mut children, .. }
                     | Node::Exclusive { ref mut children, .. }
@@ -35,27 +36,25 @@ impl Regex {
                     | Node::MatchOne { ref mut children, .. }
                     | Node::MatchAll { ref mut children }
                     | Node::NotMatchOne { ref mut children, .. } => {
-                        children.push(map_index.clone());
+                        children.push(len);
                     }
                     Node::End => panic!("change transition function failed"),
                 }
             }
-            callstack.push(map_index.clone());
-            *map_index += 1;
+            callstack.push(len);
         }
 
-        fn add_character(c: char, map: &mut NodeMap, callstack: &mut Vec<usize>, map_index: &mut usize, chars: &Vec<char>, char_index: &usize) {
-            add_node(Node::new_from_char(c, false), map, callstack, map_index, chars, char_index)
+        fn add_character(c: char, node_vec: &mut Vec::<Node>, callstack: &mut Vec<usize>, chars: &Vec<char>, char_index: &usize) {
+            add_node(Node::new_from_char(c, false), node_vec, callstack, chars, char_index)
         }
 
         fn parse(
-            mut map: NodeMap,
+            mut node_vec: Vec::<Node>,
             mut string: Vec<char>,
-            mut map_index: usize,
             mut callstack: &mut Vec<usize>,
-            mut upcoming_transition_stack: &mut Vec<usize>,
+            upcoming_transition_stack: &mut Vec<usize>,
             mut string_index: usize,
-        ) -> (NodeMap, usize, usize) {
+        ) -> (Vec::<Node>, usize) {
             let mut escaped = false;
             let mut collecting_square_bracket_expr = false;
             let mut collecting_curly_brackets = false;
@@ -80,7 +79,7 @@ impl Regex {
                     if character == ']' {
                         if string[string_index - 1] != BACKSLASH {
                             collecting_square_bracket_expr = false;
-                            current_range = parse_square_brackets(current_range, &mut map_index, &mut map, &mut callstack);
+                            current_range = parse_square_brackets(current_range, &mut node_vec, &mut callstack);
                         } else {
                             current_range.push(string[string_index - 1]);
                         }
@@ -89,36 +88,32 @@ impl Regex {
                     }
                 } else if escaped {
                     match character {
-                        'n' => add_character('\n', &mut map, &mut callstack, &mut map_index, &string, &string_index),
+                        'n' => add_character('\n', &mut node_vec, &mut callstack, &string, &string_index),
                         'd' => add_node(
                             Node::new_from_chars(DIGITS.to_vec(), false),
-                            &mut map,
+                            &mut node_vec,
                             &mut callstack,
-                            &mut map_index,
                             &string,
                             &string_index,
                         ),
                         'D' => add_node(
                             Node::new_from_chars(DIGITS.to_vec(), true),
-                            &mut map,
+                            &mut node_vec,
                             &mut callstack,
-                            &mut map_index,
                             &string,
                             &string_index,
                         ),
                         's' => add_node(
                             Node::new_from_chars(WHITESPACE.to_vec(), false),
-                            &mut map,
+                            &mut node_vec,
                             &mut callstack,
-                            &mut map_index,
                             &string,
                             &string_index,
                         ),
                         'S' => add_node(
                             Node::new_from_chars(WHITESPACE.to_vec(), true),
-                            &mut map,
+                            &mut node_vec,
                             &mut callstack,
-                            &mut map_index,
                             &string,
                             &string_index,
                         ),
@@ -129,9 +124,8 @@ impl Regex {
                             vec.push('_');
                             add_node(
                                 Node::new_from_chars(vec, false),
-                                &mut map,
+                                &mut node_vec,
                                 &mut callstack,
-                                &mut map_index,
                                 &string,
                                 &string_index,
                             );
@@ -143,15 +137,14 @@ impl Regex {
                             vec.push('_');
                             add_node(
                                 Node::new_from_chars(vec, true),
-                                &mut map,
+                                &mut node_vec,
                                 &mut callstack,
-                                &mut map_index,
                                 &string,
                                 &string_index,
                             );
                         }
                         _ => {
-                            add_character(character, &mut map, &mut callstack, &mut map_index, &string, &string_index);
+                            add_character(character, &mut node_vec, &mut callstack, &string, &string_index);
                         }
                     };
                     escaped = false;
@@ -161,15 +154,15 @@ impl Regex {
                             escaped = true;
                         }
                         '(' => {
-                            let before_index: usize = map_index.clone();
-                            let mut before = Node::new_transition();
-                            map_index += 1;
-                            let after_index: usize = map_index.clone();
-                            let mut after = Node::new_transition();
-                            map_index += 1;
+                            let before_index: usize = node_vec.len();
+                            let before = Node::new_transition();
+                            node_vec.push(before);
+                            let after_index: usize = node_vec.len();
+                            let after = Node::new_transition();
+                            node_vec.push(after);
                             upcoming_transition_stack.push(after_index);
                             let old = callstack.pop().unwrap();
-                            let mut to_connect = map.get(&old).unwrap().clone();
+                            let to_connect = node_vec.get_mut(old).unwrap();
                             match to_connect {
                                 Node::Inclusive { ref mut children, .. }
                                 | Node::Exclusive { ref mut children, .. }
@@ -183,16 +176,13 @@ impl Regex {
                                 }
                                 Node::End => panic!("aah"),
                             }
-                            map.insert(old.clone(), to_connect);
-                            map.insert(before_index.clone(), before);
-                            map.insert(after_index.clone(), after);
                             callstack.push(before_index);
                         }
                         ')' => {
                             // println!("Before ) Operator {:?}", callstack);
                             let after_index = upcoming_transition_stack.last().unwrap();
-                            let current_node_index = callstack.last().unwrap();
-                            let mut current_node = map.get_mut(current_node_index).unwrap();
+                            let current_last_node_index = callstack.last().unwrap();
+                            let current_node = node_vec.get_mut(current_last_node_index.clone()).unwrap();
                             match current_node {
                                 Node::Inclusive { ref mut children, .. }
                                 | Node::Exclusive { ref mut children, .. }
@@ -207,11 +197,11 @@ impl Regex {
                                 Node::End => panic!("something went wrong"),
                             }
                             let to_connect = upcoming_transition_stack.last().unwrap();
-                            let node = map.get(to_connect).unwrap();
+                            let node = node_vec.get(to_connect.clone()).unwrap();
                             let mut new_node = node.clone();
                             match new_node {
                                 Node::Transition { ref mut children, .. } => {
-                                    children.push(map_index);
+                                    children.push(node_vec.len()-1);
                                 }
                                 _ => panic!("Expected transition node found something else"),
                             }
@@ -226,8 +216,8 @@ impl Regex {
                         '|' => {
                             // println!("Before | Operator {:?}", callstack);
                             let after_index = upcoming_transition_stack.last().unwrap();
-                            let current_node_index = callstack.last().unwrap();
-                            let mut current_node = map.get(current_node_index).unwrap().clone();
+                            let current_last_node_index = callstack.last().unwrap();
+                            let mut current_node = node_vec.get(current_last_node_index.clone()).unwrap().clone();
                             match &mut current_node {
                                 Node::Inclusive { ref mut children, .. }
                                 | Node::Exclusive { ref mut children, .. }
@@ -241,25 +231,25 @@ impl Regex {
                                 }
                                 Node::End => panic!("something went wrong"),
                             }
-                            map.insert(current_node_index.clone(), current_node);
+                            node_vec[current_last_node_index.clone()] = current_node;
                             callstack.pop();
                             // println!("After | Operator {:?}", callstack);
                         }
                         '+' => {
                             if previous_char_is_closing_bracket(&string_index, &string) {
-                                let node_index = callstack.last().unwrap();
-                                let mut after = map.get(&node_index).unwrap().clone();
-                                let before_index = node_index - 1;
+                                let last_node_index = callstack.last().unwrap();
+                                let after = node_vec.get_mut(last_node_index.clone()).unwrap();
+                                let before_index = last_node_index - 1;
                                 match after {
                                     Node::Transition { ref mut children, .. } => {
                                         children.push(before_index);
                                     }
                                     _ => panic!("Addition Compile error"),
                                 }
-                                map.insert(node_index.clone(), after);
+                                println!(" + Before: {}, callstack: {:?}, final index of vec: {}", before_index, callstack, node_vec.len()-1);
                             } else {
-                                let x = callstack.last().unwrap();
-                                let mut node = map.get(x).unwrap().clone();
+                                let x = callstack.last().unwrap().clone();
+                                let node = node_vec.get_mut(x).unwrap();
                                 match node {
                                     Node::Inclusive { ref mut children, .. }
                                     | Node::Exclusive { ref mut children, .. }
@@ -273,14 +263,13 @@ impl Regex {
                                     }
                                     Node::End => panic!("Addition Compile error"),
                                 }
-                                map.insert(x.clone(), node);
                             }
                         }
                         '*' => {
                             if previous_char_is_closing_bracket(&string_index, &string) {
-                                let node_index = callstack.pop().unwrap();
-                                let mut after = map.get_mut(&node_index).unwrap();
-                                let before_index = node_index - 1;
+                                let last_node_index = callstack.pop().unwrap();
+                                let after = node_vec.get_mut(last_node_index).unwrap();
+                                let before_index = last_node_index - 1;
                                 match after {
                                     Node::Transition { ref mut children, .. } => {
                                         children.push(before_index);
@@ -289,8 +278,8 @@ impl Regex {
                                 }
                                 callstack.push(before_index);
                             } else {
-                                let node_index = callstack.pop().unwrap();
-                                let mut node = map.get(&node_index).unwrap().clone();
+                                let last_node_index = callstack.pop().unwrap();
+                                let mut node = node_vec.get(last_node_index).unwrap().clone();
                                 let mut new_transition = Node::new_transition();
                                 match node {
                                     Node::Inclusive { ref mut children, .. }
@@ -301,40 +290,38 @@ impl Regex {
                                     | Node::MatchOne { ref mut children, .. }
                                     | Node::MatchAll { ref mut children }
                                     | Node::NotMatchOne { ref mut children, .. } => {
-                                        children.push(node_index);
-                                        map.insert(node_index + 1, node);
+                                        children.push(last_node_index);
+                                        node_vec.push(node);
                                     }
                                     Node::End => panic!("Something went wrong here"),
                                 };
                                 match new_transition {
                                     Node::Transition { ref mut children, .. } => {
-                                        children.push(node_index + 1);
+                                        children.push(last_node_index + 1);
                                     }
                                     _ => panic!("Something went wrong here"),
                                 }
-                                map.insert(node_index.clone(), new_transition);
-                                callstack.push(node_index.clone());
-                                map_index += 1;
+                                node_vec[last_node_index] = new_transition;
+                                callstack.push(last_node_index);
                             }
                         }
                         '^' => add_node(
                             Node::new_start_of_line(),
-                            &mut map,
+                            &mut node_vec,
                             &mut callstack,
-                            &mut map_index,
                             &string,
                             &string_index,
                         ),
-                        '$' => add_node(Node::new_end_of_line(), &mut map, &mut callstack, &mut map_index, &string, &string_index),
-                        '.' => add_node(Node::new_match_all(), &mut map, &mut callstack, &mut map_index, &string, &string_index),
+                        '$' => add_node(Node::new_end_of_line(), &mut node_vec, &mut callstack, &string, &string_index),
+                        '.' => add_node(Node::new_match_all(), &mut node_vec, &mut callstack, &string, &string_index),
                         '?' => {
                             let mut q = |brackets: bool| {
                                 if brackets {
-                                let len = callstack.len();
-                                let to_connect = callstack[len - 2];
-                                let to_connect2 = callstack.last().unwrap();
-                                let node = map.get_mut(&to_connect).unwrap();
-                                match node {
+                                // println!("{:?}", callstack);
+                                let before_index = callstack.last().unwrap() - 1;
+                                let after_index = callstack.last().unwrap().clone();
+                                let before = node_vec.get_mut(before_index).unwrap();
+                                match before {
                                     Node::Inclusive { ref mut children, .. }
                                     | Node::Exclusive { ref mut children, .. }
                                     | Node::Transition { ref mut children, .. }
@@ -343,40 +330,23 @@ impl Regex {
                                     | Node::MatchOne { ref mut children, .. }
                                     | Node::MatchAll { ref mut children }
                                     | Node::NotMatchOne { ref mut children, .. } => {
-                                        children.push(map_index);
+                                        children.push(after_index);
                                     }
                                     Node::End => panic!(),
                                 }
-                                let node = map.get_mut(to_connect2).unwrap();
-                                match node {
-                                    Node::Inclusive { ref mut children, .. }
-                                    | Node::Exclusive { ref mut children, .. }
-                                    | Node::Transition { ref mut children, .. }
-                                    | Node::BeginningOfLine { ref mut children }
-                                    | Node::EndOfLine { ref mut children }
-                                    | Node::MatchOne { ref mut children, .. }
-                                    | Node::MatchAll { ref mut children }
-                                    | Node::NotMatchOne { ref mut children, .. } => {
-                                        children.push(map_index);
-                                    }
-                                    Node::End => panic!(),
-                                };
-                                map.insert(map_index, Node::new_transition());
-                                callstack.push(map_index);
-                                map_index += 1;
                             } else {
                                 let mut new_transition1 = Node::new_transition();
-                                let mut new_transition2 = Node::new_transition();
+                                let new_transition2 = Node::new_transition();
                                 let old = callstack.pop().unwrap();
-                                let mut old_node = map.get(&old).unwrap().clone();
+                                let mut old_node = node_vec.get(old).unwrap().clone();
                                 match new_transition1 {
                                     Node::Transition {ref mut children } => {
-                                        children.push(map_index);
-                                        children.push(map_index + 2);
+                                        children.push(node_vec.len());
+                                        children.push(node_vec.len()+1);
                                     }
                                     _ => panic!()
                                 }
-                                map.insert(old, new_transition1);
+                                node_vec[old] = new_transition1;
                                 match old_node {
                                     Node::Inclusive { ref mut children, .. }
                                     | Node::Exclusive { ref mut children, .. }
@@ -386,15 +356,13 @@ impl Regex {
                                     | Node::MatchOne { ref mut children, .. }
                                     | Node::MatchAll { ref mut children }
                                     | Node::NotMatchOne { ref mut children, .. } => {
-                                        children.push(map_index + 1);
+                                        children.push(node_vec.len()+1);
                                     }
                                     Node::End => panic!(),
                                 }
-                                map.insert(map_index, old_node);
-                                map_index += 1;
-                                map.insert(map_index, new_transition2);
-                                callstack.push(map_index);
-                                map_index += 1;
+                                node_vec.push(old_node);
+                                node_vec.push(new_transition2);
+                                callstack.push(node_vec.len()-1);
                             }
                             };
                             if previous_char_is_closing_bracket(&string_index, &string) {
@@ -408,14 +376,14 @@ impl Regex {
                             string.remove(string_index);
                             string_index -= 1;
                         },
-                        _ =>  add_character(character, &mut map, callstack, &mut map_index, &string, &string_index),
+                        _ =>  add_character(character, &mut node_vec, callstack, &string, &string_index),
                     }
                 }
                 string_index += 1;
             }
             // println!("Final {:?}", callstack);
-            let index = callstack.last().unwrap();
-            let mut x = map.get(index).unwrap().clone();
+            let index = callstack.last().unwrap().clone();
+            let x = node_vec.get_mut(index).unwrap();
             match x {
                 Node::End => {}
                 Node::Exclusive { ref mut children, .. }
@@ -427,17 +395,16 @@ impl Regex {
                 | Node::MatchOne { ref mut children, .. }
                 | Node::NotMatchOne { ref mut children, .. } => {
                     children.push(1);
-                    map.insert(index.clone(), x);
                 }
             };
-            map_index += 1;
-            return (map, map_index, string_index);
+            println!("Node Vec: {:?}", node_vec);
+            return (node_vec, string_index);
         }
         // println!("compiling");
-        let mut map = NodeMap::default();
-        map.insert(0, Node::new_transition());
-        map.insert(1, Node::End);
-        let (new_tree, _, _) = parse(map, str_to_char_vec(self.expr.as_str()), 2, &mut vec![0, 0], &mut vec![1], 0);
-        self.tree = new_tree;
+        let mut node_vec = Vec::<Node>::default();
+        node_vec.push(Node::new_transition());
+        node_vec.push(Node::End);
+        let (new_tree, _, ) = parse(node_vec, str_to_char_vec(self.expr.as_str()), &mut vec![0, 0], &mut vec![1], 0);
+        self.node_vec = new_tree;
     }
 }

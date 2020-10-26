@@ -1,8 +1,3 @@
-// use std::collections::*;
-use fnv::FnvHashMap;
-
-// much quicker than a regular HashMap
-pub type NodeMap = FnvHashMap<usize, Node>;
 
 #[derive(Clone, Debug)]
 pub enum Node {
@@ -21,21 +16,7 @@ impl Node {
     pub fn new_transition() -> Self {
         return Node::Transition { children: vec![] };
     }
-
-    pub fn new(exclude: bool) -> Self {
-        if exclude {
-            Node::Exclusive {
-                children: vec![],
-                characters: vec![],
-            }
-        } else {
-            Node::Inclusive {
-                children: vec![],
-                characters: vec![],
-            }
-        }
-    }
-
+    
     pub fn new_match_all() -> Self {
         return Node::MatchAll { children: vec![] };
     }

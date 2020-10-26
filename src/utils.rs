@@ -1,5 +1,6 @@
 use super::{constants::*, node::*};
 
+#[inline]
 pub fn str_to_char_vec(string: &str) -> Vec<char> {
     let mut vec = Vec::with_capacity(string.len());
     for c in string.bytes() {
@@ -8,6 +9,7 @@ pub fn str_to_char_vec(string: &str) -> Vec<char> {
     return vec;
 }
 
+#[inline]
 pub fn parse_range(c1: char, c2: char, exclusive: bool) -> Node {
     let mut range = vec![];
     for cat in [LOWERCASE, UPPERCASE, DIGITS].iter() {
@@ -21,6 +23,7 @@ pub fn parse_range(c1: char, c2: char, exclusive: bool) -> Node {
     return Node::new_from_chars(range, exclusive);
 }
 
+#[inline]
 pub fn previous_char_is_closing_bracket(index: &usize, chars: &[char]) -> bool {
     if index < &2 {
         return false;
@@ -38,6 +41,7 @@ pub fn previous_char_is_closing_bracket(index: &usize, chars: &[char]) -> bool {
     }
 }
 
+#[inline]
 pub fn parse_range_character(c: char) -> Node {
     match c {
         'd' => return Node::new_from_chars(DIGITS.to_vec(), false),
@@ -63,14 +67,14 @@ pub fn parse_range_character(c: char) -> Node {
     };
 }
 
-pub fn parse_square_brackets(chars: Vec<char>, node_index: &mut usize, node_vec: &mut NodeMap, callstack: &mut Vec<usize>) -> Vec<char> {
+pub fn parse_square_brackets(chars: Vec<char>, node_vec: &mut Vec::<Node>, callstack: &mut Vec<usize>) -> Vec::<char> {
     // println!("Square Expression: {:?}", chars);
-    let mut before = Node::new_transition();
-    let before_index = node_index.clone();
-    *node_index += 1;
-    let mut after = Node::new_transition();
-    let after_index = node_index.clone();
-    *node_index += 1;
+    let before = Node::new_transition();
+    let before_index = node_vec.len();
+    node_vec.push(before);
+    let after = Node::new_transition();
+    let after_index = node_vec.len();
+    node_vec.push(after);
     let mut exclusive = false;
     let mut nodes = Vec::<Node>::new();
     if chars[0] == '^' {
@@ -194,9 +198,10 @@ pub fn parse_square_brackets(chars: Vec<char>, node_index: &mut usize, node_vec:
     }
     nodes.push(Node::new_from_chars(final_range, exclusive));
     for mut node in nodes {
-        match before {
+        let node_vec_len = node_vec.len();
+        match node_vec.get_mut(before_index).unwrap() {
             Node::Transition { ref mut children, .. } => {
-                children.push(node_index.clone());
+                children.push(node_vec_len);
             }
             _ => panic!(),
         }
@@ -213,11 +218,10 @@ pub fn parse_square_brackets(chars: Vec<char>, node_index: &mut usize, node_vec:
             }
             Node::End => panic!(),
         }
-        node_vec.insert(node_index.clone(), node);
-        *node_index += 1;
+        node_vec.push(node);
     }
     let to_connect = callstack.pop().unwrap();
-    let to_connect = node_vec.get_mut(&to_connect).unwrap();
+    let to_connect = node_vec.get_mut(to_connect).unwrap();
     match to_connect {
         Node::Inclusive { ref mut children, .. }
         | Node::Exclusive { ref mut children, .. }
@@ -231,10 +235,7 @@ pub fn parse_square_brackets(chars: Vec<char>, node_index: &mut usize, node_vec:
         }
         Node::End => panic!(),
     }
-    callstack.push(before_index);
     callstack.push(after_index);
-    node_vec.insert(after_index, after);
-    node_vec.insert(before_index, before);
     return vec![];
 }
 
