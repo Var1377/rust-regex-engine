@@ -3,12 +3,12 @@ use super::regex::*;
 use super::utils::*;
 impl Regex {
     pub fn match_str(&self, string: &str) -> bool {
-        fn _match(map: &NodeMap, chars: &[char], node_index: &usize, char_index: usize) -> bool {
-            let node = map.get(node_index).unwrap();
+        fn _match(node_vec: &NodeMap, chars: &[char], node_index: &usize, char_index: usize) -> bool {
+            let node = node_vec.get(node_index).unwrap();
             match node {
                 Node::Transition { children, .. } => {
                     for child in children {
-                        if _match(map, chars, child, char_index) {
+                        if _match(node_vec, chars, child, char_index) {
                             return true;
                         }
                     }
@@ -21,7 +21,7 @@ impl Regex {
                     let to_match = chars[char_index];
                     if characters.contains(&to_match) {
                         for child in children {
-                            if _match(map, chars, child, char_index + 1) {
+                            if _match(node_vec, chars, child, char_index + 1) {
                                 return true;
                             }
                         }
@@ -42,7 +42,7 @@ impl Regex {
                         false
                     } else {
                         for child in children {
-                            if _match(map, chars, child, char_index + 1) {
+                            if _match(node_vec, chars, child, char_index + 1) {
                                 return true;
                             }
                         }
@@ -58,7 +58,7 @@ impl Regex {
                         return false;
                     } else {
                         for child in children {
-                            if _match(map, chars, child, char_index + 1) {
+                            if _match(node_vec, chars, child, char_index + 1) {
                                 return true;
                             }
                         }
@@ -68,7 +68,7 @@ impl Regex {
                 Node::EndOfLine { children, .. } => {
                     if char_index == chars.len() {
                         for child in children {
-                            if _match(map, chars, child, char_index) {
+                            if _match(node_vec, chars, child, char_index) {
                                 return true;
                             }
                         }
@@ -77,7 +77,7 @@ impl Regex {
                     if chars[char_index] == '\n' {
                         {
                             for child in children {
-                                if _match(map, chars, child, char_index + 1) {
+                                if _match(node_vec, chars, child, char_index + 1) {
                                     return true;
                                 }
                             }
@@ -89,7 +89,7 @@ impl Regex {
                 Node::BeginningOfLine { children, .. } => {
                     if char_index == 0 {
                         for child in children {
-                            if _match(map, chars, child, char_index) {
+                            if _match(node_vec, chars, child, char_index) {
                                 return true;
                             }
                         }
@@ -98,7 +98,7 @@ impl Regex {
                     if chars[char_index] == '\n' {
                         {
                             for child in children {
-                                if _match(map, chars, child, char_index + 1) {
+                                if _match(node_vec, chars, child, char_index + 1) {
                                     return true;
                                 }
                             }
@@ -114,7 +114,7 @@ impl Regex {
                     let to_match = chars[char_index];
                     if to_match == *character {
                         for child in children {
-                            if _match(map, chars, child, char_index + 1) {
+                            if _match(node_vec, chars, child, char_index + 1) {
                                 return true;
                             }
                         }
@@ -129,7 +129,7 @@ impl Regex {
                     let to_match = chars[char_index];
                     if to_match != *character {
                         for child in children {
-                            if _match(map, chars, child, char_index + 1) {
+                            if _match(node_vec, chars, child, char_index + 1) {
                                 return true;
                             }
                         }
@@ -141,7 +141,7 @@ impl Regex {
         }
         let mut chars = str_to_char_vec(string);
         for i in 0..chars.len() {
-            if _match(self.tree.as_ref().unwrap(), &chars, &0, i) {
+            if _match(&self.tree, &chars, &0, i) {
                 return true;
             }
         }

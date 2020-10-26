@@ -1,5 +1,4 @@
 use super::{
-    compiled_node::*,
     constants::*,
     node::{Node, NodeMap},
     regex::Regex,
@@ -439,13 +438,6 @@ impl Regex {
         map.insert(0, Node::new_transition());
         map.insert(1, Node::End);
         let (new_tree, _, _) = parse(map, str_to_char_vec(self.expr.as_str()), 2, &mut vec![0, 0], &mut vec![1], 0);
-        self.tree = Some(new_tree);
-    }
-
-    fn compile(&mut self) {
-        let mut tree = self.tree.clone().unwrap();
-        // self.tree = None;
-        let root = CompiledNode::map_to_compiled_node_tree(&mut tree);
-        self.compiled_root = Some(root);
+        self.tree = new_tree;
     }
 }

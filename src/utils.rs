@@ -63,14 +63,14 @@ pub fn parse_range_character(c: char) -> Node {
     };
 }
 
-pub fn parse_square_brackets(chars: Vec<char>, map_index: &mut usize, node_map: &mut NodeMap, callstack: &mut Vec<usize>) -> Vec<char> {
+pub fn parse_square_brackets(chars: Vec<char>, node_index: &mut usize, node_vec: &mut NodeMap, callstack: &mut Vec<usize>) -> Vec<char> {
     // println!("Square Expression: {:?}", chars);
     let mut before = Node::new_transition();
-    let before_index = map_index.clone();
-    *map_index += 1;
+    let before_index = node_index.clone();
+    *node_index += 1;
     let mut after = Node::new_transition();
-    let after_index = map_index.clone();
-    *map_index += 1;
+    let after_index = node_index.clone();
+    *node_index += 1;
     let mut exclusive = false;
     let mut nodes = Vec::<Node>::new();
     if chars[0] == '^' {
@@ -196,7 +196,7 @@ pub fn parse_square_brackets(chars: Vec<char>, map_index: &mut usize, node_map: 
     for mut node in nodes {
         match before {
             Node::Transition { ref mut children, .. } => {
-                children.push(map_index.clone());
+                children.push(node_index.clone());
             }
             _ => panic!(),
         }
@@ -213,11 +213,11 @@ pub fn parse_square_brackets(chars: Vec<char>, map_index: &mut usize, node_map: 
             }
             Node::End => panic!(),
         }
-        node_map.insert(map_index.clone(), node);
-        *map_index += 1;
+        node_vec.insert(node_index.clone(), node);
+        *node_index += 1;
     }
     let to_connect = callstack.pop().unwrap();
-    let to_connect = node_map.get_mut(&to_connect).unwrap();
+    let to_connect = node_vec.get_mut(&to_connect).unwrap();
     match to_connect {
         Node::Inclusive { ref mut children, .. }
         | Node::Exclusive { ref mut children, .. }
@@ -233,8 +233,8 @@ pub fn parse_square_brackets(chars: Vec<char>, map_index: &mut usize, node_map: 
     }
     callstack.push(before_index);
     callstack.push(after_index);
-    node_map.insert(after_index, after);
-    node_map.insert(before_index, before);
+    node_vec.insert(after_index, after);
+    node_vec.insert(before_index, before);
     return vec![];
 }
 
