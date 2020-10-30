@@ -1,5 +1,5 @@
 #[derive(Clone, Debug)]
-pub enum Node {
+pub(crate) enum Node {
     Inclusive { children: Vec<usize>, characters: Vec<char> },
     Exclusive { children: Vec<usize>, characters: Vec<char> },
     End,

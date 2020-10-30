@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 #![feature(test, array_map, map_into_keys_values)]
 
 extern crate test;
@@ -5,12 +6,23 @@ extern crate test;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use config::*;
     use regex::Regex;
     use test::Bencher;
 
+    const GLOBAL_CONFIG: RegexConfig = RegexConfig {
+        case_sensitive: true,
+        location: SearchLocation::Global,
+    };
+
+    const LOCAL_CONFIG: RegexConfig = RegexConfig {
+        case_sensitive: true,
+        location: SearchLocation::First
+    };
+
     #[test]
     fn compile_test() {
-        let _r = Regex::new("[^hi]");
+        let _r = Regex::new("hi");
     }
 
     #[test]
@@ -80,7 +92,6 @@ mod tests {
         assert_eq!(r.match_str("bye there"), false);
         assert_eq!(r.match_str("llo there"), false);
     }
-
 
     #[test]
     fn square_brackets() {
@@ -224,14 +235,14 @@ mod tests {
     }
 
     #[test]
-    fn single_character_curly_brackets () {
+    fn single_character_curly_brackets() {
         let r = Regex::new("^a{4}b{2}c$");
         assert_eq!(r.match_str("aaaabbc"), true);
         assert_eq!(r.match_str("aaabc"), false);
     }
 
     #[test]
-    fn single_character_curly_brackets_comma () {
+    fn single_character_curly_brackets_comma() {
         let r = Regex::new("^a{4,}b{2,}c$");
         // println!("{:?}", r.node_vec);
         assert_eq!(r.match_str("aaaaaaaaaaaaabbc"), true);
@@ -247,35 +258,35 @@ mod tests {
     }
 
     #[test]
-    fn brackets_curly_brackets () {
+    fn brackets_curly_brackets() {
         let r = Regex::new("(a|b|c){4}");
         assert_eq!(r.match_str("abca"), true);
         assert_eq!(r.match_str("aadbc"), false);
     }
 
     #[test]
-    fn brackets_curly_brackets_comma () {
+    fn brackets_curly_brackets_comma() {
         let r = Regex::new("(a|b|c){4,}");
         assert_eq!(r.match_str("abaaaaaaaaaaaaaacaad"), true);
         assert_eq!(r.match_str("aadbc"), false);
     }
 
     #[test]
-    fn brackets_curly_brackets_both () {
+    fn brackets_curly_brackets_both() {
         let r = Regex::new("^(a|b|c){4,6}$");
         assert_eq!(r.match_str("abcb"), true);
         // assert_eq!(r.match_str("aab"), false);
     }
 
     #[test]
-    fn sq_brackets_curly_brackets () {
+    fn sq_brackets_curly_brackets() {
         let r = Regex::new("[abc]{4}");
         assert_eq!(r.match_str("abca"), true);
         assert_eq!(r.match_str("aadbc"), false);
     }
 
     #[test]
-    fn sq_brackets_curly_brackets_comma () {
+    fn sq_brackets_curly_brackets_comma() {
         let r = Regex::new("[abc]{4,}");
         assert_eq!(r.match_str("abaaaaaaaaaaaaaacaad"), true);
         assert_eq!(r.match_str("aadbc"), false);
@@ -291,10 +302,11 @@ mod tests {
     }
 }
 
-mod compiled_node;
+pub mod config;
 mod constants;
 mod matcher;
 mod node;
 mod parse;
 pub mod regex;
+mod replace;
 mod utils;

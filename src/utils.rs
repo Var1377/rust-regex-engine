@@ -1,7 +1,6 @@
 use super::{constants::*, node::*};
 
-#[inline]
-pub fn str_to_char_vec(string: &str) -> Vec<char> {
+pub(crate) fn str_to_char_vec(string: &str) -> Vec<char> {
     let mut vec = Vec::with_capacity(string.len());
     for c in string.bytes() {
         vec.push(c as char);
@@ -9,8 +8,15 @@ pub fn str_to_char_vec(string: &str) -> Vec<char> {
     return vec;
 }
 
-#[inline]
-pub fn parse_range(c1: char, c2: char, exclusive: bool) -> Node {
+pub(crate) fn char_vec_to_string(chars: &[char]) -> String {
+    let mut s = String::new();
+    for character in chars {
+        s.push(*character);
+    }
+    return s;
+}
+
+pub(crate) fn parse_range(c1: char, c2: char, exclusive: bool) -> Node {
     let mut range = vec![];
     for cat in [LOWERCASE, UPPERCASE, DIGITS].iter() {
         if cat.contains(&c1) {
@@ -23,15 +29,13 @@ pub fn parse_range(c1: char, c2: char, exclusive: bool) -> Node {
     return Node::new_from_chars(range, exclusive);
 }
 
-#[inline]
 pub fn previous_char_is_closing_bracket(index: &usize, chars: &[char]) -> bool {
-    if index < &2 {
+    if *index == 0 {
         return false;
     } else {
-        let lookback = chars[index-1];
-        if lookback == ')'||lookback == ']' {
-            let lookback2 = chars[index-2];
-            if lookback2 == BACKSLASH {
+        let lookback = chars[index - 1];
+        if lookback == ')' || lookback == ']' {
+            if check_if_escaped(chars, *index - 1) {
                 return false;
             }
             return true;
@@ -41,8 +45,7 @@ pub fn previous_char_is_closing_bracket(index: &usize, chars: &[char]) -> bool {
     }
 }
 
-#[inline]
-pub fn parse_range_character(c: char) -> Node {
+pub(crate) fn parse_range_character(c: char) -> Node {
     match c {
         'd' => return Node::new_from_chars(DIGITS.to_vec(), false),
         'D' => return Node::new_from_chars(DIGITS.to_vec(), true),
@@ -67,7 +70,7 @@ pub fn parse_range_character(c: char) -> Node {
     };
 }
 
-pub fn parse_square_brackets(chars: Vec<char>, node_vec: &mut Vec::<Node>, callstack: &mut Vec<usize>) -> Vec::<char> {
+pub(crate) fn parse_square_brackets(chars: Vec<char>, node_vec: &mut Vec<Node>, callstack: &mut Vec<usize>) -> Vec<char> {
     // println!("Square Expression: {:?}", chars);
     let before = Node::new_transition();
     let before_index = node_vec.len();
@@ -239,11 +242,11 @@ pub fn parse_square_brackets(chars: Vec<char>, node_vec: &mut Vec::<Node>, calls
     return vec![];
 }
 
-pub fn parse_curly_brackets(contents: &Vec::<char>, string: &mut Vec::<char>, string_index: &usize) {
+pub(crate) fn parse_curly_brackets(contents: &Vec<char>, string: &mut Vec<char>, string_index: &usize) {
     println!("{:?}", contents);
-    let pos_of_comma = contents.iter().position(|c| *c==',');
+    let pos_of_comma = contents.iter().position(|c| *c == ',');
     if let Some(p) = pos_of_comma {
-        if p == contents.len() -1 {
+        if p == contents.len() - 1 {
             let mut s1 = String::new();
             for i in 0..p {
                 s1.push(contents[i]);
@@ -252,32 +255,32 @@ pub fn parse_curly_brackets(contents: &Vec::<char>, string: &mut Vec::<char>, st
             if previous_char_is_closing_bracket(string_index, string) {
                 let characters = get_enclosing_brackets_to_repeat(string, string_index - 1);
                 string.insert(*string_index, '+');
-                for _ in 0..to_repeat-1 {
+                for _ in 0..to_repeat - 1 {
                     for character in &characters {
                         string.insert(*string_index, *character);
                     }
                 }
             } else {
                 string.insert(*string_index, '+');
-                let previous_character = string[*string_index-1];
-                for _ in 0..to_repeat-1 {
+                let previous_character = string[*string_index - 1];
+                for _ in 0..to_repeat - 1 {
                     string.insert(*string_index, previous_character);
                 }
             }
         } else {
             let mut s1 = String::new();
-                let mut s2 = String::new();
-                for i in 0..p {
-                    s1.push(contents[i])
-                }
-                for i in p+1..contents.len() {
-                    s2.push(contents[i]);
-                }
-                let int1 = s1.parse::<usize>().unwrap();
-                let int2 = s1.parse::<usize>().unwrap() - int1;
+            let mut s2 = String::new();
+            for i in 0..p {
+                s1.push(contents[i])
+            }
+            for i in p + 1..contents.len() {
+                s2.push(contents[i]);
+            }
+            let int1 = s1.parse::<usize>().unwrap();
+            let int2 = s1.parse::<usize>().unwrap() - int1;
             if previous_char_is_closing_bracket(string_index, string) {
-                let characters = get_enclosing_brackets_to_repeat(string, *string_index-1);
-                for _ in 0..int1-1 {
+                let characters = get_enclosing_brackets_to_repeat(string, *string_index - 1);
+                for _ in 0..int1 - 1 {
                     for character in &characters {
                         string.insert(*string_index, *character);
                     }
@@ -289,8 +292,8 @@ pub fn parse_curly_brackets(contents: &Vec::<char>, string: &mut Vec::<char>, st
                     }
                 }
             } else {
-                let previous_character = string[*string_index-1];
-                for _ in 0..int1-1 {
+                let previous_character = string[*string_index - 1];
+                for _ in 0..int1 - 1 {
                     string.insert(*string_index, previous_character);
                 }
                 for _ in 0..int2 {
@@ -309,14 +312,14 @@ pub fn parse_curly_brackets(contents: &Vec::<char>, string: &mut Vec::<char>, st
         let to_repeat = s1.parse::<usize>().unwrap();
         if previous_char_is_closing_bracket(string_index, string) {
             let characters = get_enclosing_brackets_to_repeat(string, string_index - 1);
-            for _ in 0..to_repeat-1 {
+            for _ in 0..to_repeat - 1 {
                 for character in &characters {
                     string.insert(*string_index, *character);
                 }
             }
         } else {
-            let previous_character = string[*string_index-1];
-            for _ in 0..to_repeat-1 {
+            let previous_character = string[*string_index - 1];
+            for _ in 0..to_repeat - 1 {
                 string.insert(*string_index, previous_character);
             }
         }
@@ -324,20 +327,20 @@ pub fn parse_curly_brackets(contents: &Vec::<char>, string: &mut Vec::<char>, st
     println!("{:?}", string);
 }
 
-fn get_enclosing_brackets_to_repeat(string: &[char], mut index: usize, ) -> Vec::<char> {
+fn get_enclosing_brackets_to_repeat(string: &[char], mut index: usize) -> Vec<char> {
     let mut s = vec![];
     if string[index] == ')' {
         let mut count = 0;
         loop {
             let character = string[index];
             s.push(character);
-            if index == 0{
-                break
+            if index == 0 {
+                break;
             }
-            if string[index] == '('&&string[index-1]!=BACKSLASH {
+            if string[index] == '(' && !check_if_escaped(string, index) {
                 count -= 1;
             }
-            if string[index] == ')'&&string[index-1]!=BACKSLASH {
+            if string[index] == ')' && !check_if_escaped(string, index) {
                 count += 1;
             }
             if count == 0 {
@@ -352,8 +355,8 @@ fn get_enclosing_brackets_to_repeat(string: &[char], mut index: usize, ) -> Vec:
             if index == 0 {
                 break;
             }
-            if string[index] == '['&&string[index-1]!=BACKSLASH {
-                break
+            if string[index] == '[' && !check_if_escaped(string, index) {
+                break;
             }
             index -= 1;
         }
@@ -362,4 +365,21 @@ fn get_enclosing_brackets_to_repeat(string: &[char], mut index: usize, ) -> Vec:
         panic!();
     }
     return s;
+}
+
+pub(crate) fn check_if_escaped(string: &[char], index: usize) -> bool {
+    if index == 0 {
+        return false;
+    }
+    if string[index - 1] == BACKSLASH {
+        if index == 1 {
+            return true;
+        } else {
+            if check_if_escaped(string, index - 1) {
+                return false;
+            }
+            return true;
+        }
+    }
+    return false;
 }
