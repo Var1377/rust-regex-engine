@@ -1,5 +1,5 @@
-#![allow(dead_code)]
-#![feature(test, array_map, map_into_keys_values)]
+#![allow(dead_code, unused_mut, unused_variables)]
+#![feature(test)]
 
 extern crate test;
 
@@ -13,11 +13,6 @@ mod tests {
     const GLOBAL_CONFIG: RegexConfig = RegexConfig {
         case_sensitive: true,
         location: SearchLocation::Global,
-    };
-
-    const LOCAL_CONFIG: RegexConfig = RegexConfig {
-        case_sensitive: true,
-        location: SearchLocation::First
     };
 
     #[test]
@@ -55,7 +50,8 @@ mod tests {
 
     #[test]
     fn in_the_middle() {
-        let r = Regex::new("abc");
+        // Needed if you want to perform a global search
+        let r = Regex::new_with_config("abc", GLOBAL_CONFIG);
         // println!("{:?}", r.node_vec);
         assert_eq!(r.match_str("ksjfdweriwukjdkabcdkjaifejs"), true);
         assert_eq!(r.match_str("ksjfdweriwukjdkadkbjaiabfcejs"), false);
@@ -181,7 +177,7 @@ mod tests {
 
     #[test]
     fn question_mark() {
-        let r = Regex::new("de?f");
+        let r = Regex::new("abcde?f");
         // println!("{:?}", r.node_vec);
         assert_eq!(r.match_str("abcdefg"), true);
         assert_eq!(r.match_str("abcdfg"), true);
@@ -292,12 +288,55 @@ mod tests {
         assert_eq!(r.match_str("aadbc"), false);
     }
 
+    #[test]
+    fn basic_replace() {
+        let r = Regex::new("hi");
+        assert_eq!("hello there",r.replace_first("hi there", "hello"));
+    }
+
+    #[test]
+    fn replace_mapped() {
+        let r = Regex::new("hi");
+        let x = r.replace_first_mapped(
+            "hi there",
+            |s| {
+                return String::from("hello");
+            }
+        );
+        assert_eq!(x, "hello there");
+    }
+
+    #[test]
+    fn replace_all () {
+        let r = Regex::new("hi");
+        assert_eq!("hello there hello hey hello",r.replace_all("hi there hi hey hi", "hello"));
+    }
+
+    #[test]
+    fn replace_all_mapped() {
+        let r = Regex::new("hi");
+        let x = r.replace_all_mapped(
+            "hi there hi hey hi",
+            |s| {
+                return String::from("hello");
+            }
+        );
+        assert_eq!(x, "hello there hello hey hello");
+    }
+
     #[bench]
-    fn benchmark(b: &mut Bencher) {
+    fn match_benchmark(b: &mut Bencher) {
         let phone = Regex::new(r"^\+*\(?[0-9]+\)?[-\s\.0-9]*$");
         b.iter(|| {
             assert_eq!(phone.match_str("+447777-666-555"), true);
             assert_eq!(phone.match_str("test@gmail.com"), false);
+        });
+    }
+
+    #[bench]
+    fn compile_benchmark(b: &mut Bencher) {
+        b.iter(|| {
+            let _i = test::black_box(Regex::new(r"^\+*\(?[0-9]+\)?[-\s\.0-9]*$"));
         });
     }
 }

@@ -38,8 +38,8 @@ impl Regex {
         fn parse(
             mut node_vec: Vec<Node>,
             mut string: Vec<char>,
-            mut callstack: &mut Vec<usize>,
-            upcoming_transition_stack: &mut Vec<usize>,
+            mut callstack: Vec<usize>,
+            mut upcoming_transition_stack: Vec<usize>,
             mut string_index: usize,
         ) -> (Vec<Node>, usize) {
             let mut escaped = false;
@@ -210,10 +210,22 @@ impl Regex {
                             // println!("After | Operator {:?}", callstack);
                         }
                         '+' => {
+                            let lazy: bool;
+                            if string_index != string.len() - 1 {
+                                if string[string_index + 1] == '?' {
+                                    string_index += 1;
+                                    lazy = true;
+                                } else {
+                                    lazy = false;
+                                }
+                            } else {
+                                lazy = false;
+                            }
                             if previous_char_is_closing_bracket(&string_index, &string) {
                                 let last_node_index = callstack.last().unwrap();
                                 let after = node_vec.get_mut(last_node_index.clone()).unwrap();
                                 let before_index = last_node_index - 1;
+
                                 match after {
                                     Node::Transition { ref mut children, .. } => {
                                         children.push(before_index);
@@ -238,20 +250,39 @@ impl Regex {
                                     | Node::MatchOne { ref mut children, .. }
                                     | Node::MatchAll { ref mut children }
                                     | Node::NotMatchOne { ref mut children, .. } => {
-                                        children.push(x.clone());
+                                        if lazy {
+                                            children.push(x);
+                                        } else {
+                                            children.insert(0, x);
+                                        }
                                     }
                                     Node::End => panic!("Addition Compile error"),
                                 }
                             }
                         }
                         '*' => {
+                            let lazy: bool;
+                            if string_index != string.len() - 1 {
+                                if string[string_index + 1] == '?' {
+                                    string_index += 1;
+                                    lazy = true;
+                                } else {
+                                    lazy = false;
+                                }
+                            } else {
+                                lazy = false;
+                            }
                             if previous_char_is_closing_bracket(&string_index, &string) {
                                 let last_node_index = callstack.pop().unwrap();
                                 let after = node_vec.get_mut(last_node_index).unwrap();
                                 let before_index = last_node_index - 1;
                                 match after {
                                     Node::Transition { ref mut children, .. } => {
-                                        children.push(before_index);
+                                        if lazy {
+                                            children.push(before_index);
+                                        } else {
+                                            children.insert(0, before_index);
+                                        }
                                     }
                                     _ => panic!("Addition Compile error"),
                                 }
@@ -269,7 +300,11 @@ impl Regex {
                                     | Node::MatchOne { ref mut children, .. }
                                     | Node::MatchAll { ref mut children }
                                     | Node::NotMatchOne { ref mut children, .. } => {
-                                        children.push(last_node_index);
+                                        if lazy {
+                                            children.push(last_node_index);
+                                        } else {
+                                            children.insert(0, last_node_index);
+                                        }
                                         node_vec.push(node);
                                     }
                                     Node::End => panic!("Something went wrong here"),
@@ -288,6 +323,17 @@ impl Regex {
                         '$' => add_node(Node::new_end_of_line(), &mut node_vec, &mut callstack, &string, &string_index),
                         '.' => add_node(Node::new_match_all(), &mut node_vec, &mut callstack, &string, &string_index),
                         '?' => {
+                            let lazy: bool;
+                            if string_index != string.len() - 1 {
+                                if string[string_index + 1] == '?' {
+                                    string_index += 1;
+                                    lazy = true;
+                                } else {
+                                    lazy = false;
+                                }
+                            } else {
+                                lazy = false;
+                            }
                             let mut q = |brackets: bool| {
                                 if brackets {
                                     // println!("{:?}", callstack);
@@ -303,7 +349,11 @@ impl Regex {
                                         | Node::MatchOne { ref mut children, .. }
                                         | Node::MatchAll { ref mut children }
                                         | Node::NotMatchOne { ref mut children, .. } => {
-                                            children.push(after_index);
+                                            if lazy {
+                                                children.push(after_index);
+                                            } else {
+                                                children.insert(0, after_index);
+                                            }
                                         }
                                         Node::End => panic!(),
                                     }
@@ -329,7 +379,11 @@ impl Regex {
                                         | Node::MatchOne { ref mut children, .. }
                                         | Node::MatchAll { ref mut children }
                                         | Node::NotMatchOne { ref mut children, .. } => {
-                                            children.push(node_vec.len() + 1);
+                                            if lazy {
+                                                children.push(node_vec.len() + 1);
+                                            } else {
+                                                children.insert(0, node_vec.len() + 1);
+                                            }
                                         }
                                         Node::End => panic!(),
                                     }
@@ -349,7 +403,7 @@ impl Regex {
                             string.remove(string_index);
                             string_index -= 1;
                         }
-                        _ => add_character(character, &mut node_vec, callstack, &string, &string_index),
+                        _ => add_character(character, &mut node_vec, &mut callstack, &string, &string_index),
                     }
                 }
                 string_index += 1;
@@ -370,14 +424,14 @@ impl Regex {
                     children.push(1);
                 }
             };
-            println!("Node Vec: {:?}", node_vec);
+            // println!("Node Vec: {:?}", node_vec);
             return (node_vec, string_index);
         }
         // println!("compiling");
         let mut node_vec = Vec::<Node>::default();
         node_vec.push(Node::new_transition());
         node_vec.push(Node::End);
-        let (new_tree, _) = parse(node_vec, str_to_char_vec(&self.expr), &mut vec![0, 0], &mut vec![1], 0);
+        let (new_tree, _) = parse(node_vec, str_to_char_vec(&self.expr), vec![0, 0], vec![1], 0);
         self.node_vec = new_tree;
     }
 }

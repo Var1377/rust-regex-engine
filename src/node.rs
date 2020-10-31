@@ -1,5 +1,6 @@
 #[derive(Clone, Debug)]
 pub(crate) enum Node {
+    // The children are effectively pointers to elsewhere in the vector of nodes
     Inclusive { children: Vec<usize>, characters: Vec<char> },
     Exclusive { children: Vec<usize>, characters: Vec<char> },
     End,

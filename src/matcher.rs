@@ -1,21 +1,34 @@
+use super::config::*;
 use super::node::*;
 use super::regex::*;
 use super::utils::*;
+
 impl Regex {
     pub fn match_str(&self, string: &str) -> bool {
         let chars = str_to_char_vec(string);
-        for i in 0..chars.len() {
-            if pure_match(&self.node_vec, &chars, &0, i) {
-                return true;
+        match self.config.location {
+            SearchLocation::Global => {
+                for i in 0..chars.len() {
+                    if pure_match(&self.node_vec, &chars, &0, i) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+            SearchLocation::First => {
+                return pure_match(&self.node_vec, &chars, &0, 0);
+            }
+            SearchLocation::Sticky(index) => {
+                return pure_match(&self.node_vec, &chars, &0, index);
             }
         }
-        return false;
     }
 
     pub fn match_string(&self, string: String) -> bool {
         return self.match_str(string.as_str());
     }
 }
+
 fn pure_match(node_vec: &[Node], chars: &[char], node_index: &usize, char_index: usize) -> bool {
     let node: &Node;
     unsafe {
