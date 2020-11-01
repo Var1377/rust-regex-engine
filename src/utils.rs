@@ -243,10 +243,11 @@ pub(crate) fn parse_square_brackets(chars: Vec<char>, node_vec: &mut Vec<Node>, 
 }
 
 pub(crate) fn parse_curly_brackets(contents: &Vec<char>, string: &mut Vec<char>, string_index: &usize) {
-    println!("{:?}", contents);
+    // println!("{:?}", contents);
     let pos_of_comma = contents.iter().position(|c| *c == ',');
     if let Some(p) = pos_of_comma {
         if p == contents.len() - 1 {
+            println!("3");
             let mut s1 = String::new();
             for i in 0..p {
                 s1.push(contents[i]);
@@ -261,10 +262,17 @@ pub(crate) fn parse_curly_brackets(contents: &Vec<char>, string: &mut Vec<char>,
                     }
                 }
             } else {
+                let mut escaped = false;
+                if check_if_escaped(&string, *string_index - 1) {
+                    escaped = true;
+                }
                 string.insert(*string_index, '+');
                 let previous_character = string[*string_index - 1];
                 for _ in 0..to_repeat - 1 {
                     string.insert(*string_index, previous_character);
+                    if escaped {
+                        string.insert(*string_index, BACKSLASH);
+                    }
                 }
             }
         } else {
@@ -277,28 +285,38 @@ pub(crate) fn parse_curly_brackets(contents: &Vec<char>, string: &mut Vec<char>,
                 s2.push(contents[i]);
             }
             let int1 = s1.parse::<usize>().unwrap();
-            let int2 = s1.parse::<usize>().unwrap() - int1;
+            let int2 = s2.parse::<usize>().unwrap() - int1;
             if previous_char_is_closing_bracket(string_index, string) {
                 let characters = get_enclosing_brackets_to_repeat(string, *string_index - 1);
-                for _ in 0..int1 - 1 {
+                for _ in 0..int2 {
+                    string.insert(*string_index, '?');
                     for character in &characters {
                         string.insert(*string_index, *character);
                     }
                 }
-                for _ in 0..int2 {
-                    string.insert(*string_index, '?');
+                for _ in 0..int1 - 1 {
                     for character in &characters {
                         string.insert(*string_index, *character);
                     }
                 }
             } else {
-                let previous_character = string[*string_index - 1];
-                for _ in 0..int1 - 1 {
-                    string.insert(*string_index, previous_character);
+                let mut escaped = false;
+                if check_if_escaped(&string, *string_index - 1) {
+                    escaped = true;
                 }
+                let previous_character = string[*string_index - 1];
                 for _ in 0..int2 {
                     string.insert(*string_index, '?');
                     string.insert(*string_index, previous_character);
+                    if escaped {
+                        string.insert(*string_index, BACKSLASH);
+                    }
+                }
+                for _ in 0..int1 - 1 {
+                    string.insert(*string_index, previous_character);
+                    if escaped {
+                        string.insert(*string_index, BACKSLASH);
+                    }
                 }
             }
             // Ends in a number, x-> y times
@@ -318,9 +336,16 @@ pub(crate) fn parse_curly_brackets(contents: &Vec<char>, string: &mut Vec<char>,
                 }
             }
         } else {
+            let mut escaped = false;
+                if check_if_escaped(&string, *string_index - 1) {
+                    escaped = true;
+                }
             let previous_character = string[*string_index - 1];
             for _ in 0..to_repeat - 1 {
                 string.insert(*string_index, previous_character);
+                if escaped {
+                    string.insert(*string_index, BACKSLASH);
+                }
             }
         }
     }

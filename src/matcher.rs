@@ -9,17 +9,17 @@ impl Regex {
         match self.config.location {
             SearchLocation::Global => {
                 for i in 0..chars.len() {
-                    if pure_match(&self.node_vec, &chars, &0, i) {
+                    if recursive_pure_match(&self.node_vec, &chars, &0, i) {
                         return true;
                     }
                 }
                 return false;
             }
             SearchLocation::First => {
-                return pure_match(&self.node_vec, &chars, &0, 0);
+                return recursive_pure_match(&self.node_vec, &chars, &0, 0);
             }
             SearchLocation::Sticky(index) => {
-                return pure_match(&self.node_vec, &chars, &0, index);
+                return recursive_pure_match(&self.node_vec, &chars, &0, index);
             }
         }
     }
@@ -29,7 +29,35 @@ impl Regex {
     }
 }
 
-fn pure_match(node_vec: &[Node], chars: &[char], node_index: &usize, char_index: usize) -> bool {
+
+// fn iterative_pure_match(node_vec: &[Node], chars: &[char], start_index: usize) -> bool {
+//     // Callstack: Vec<(node_index, child, char_index)>
+//     let mut callstack = Vec::with_capacity(node_vec.len());
+//     let mut char_index = 0usize;
+//     callstack.push((0usize, 0usize, start_index));
+//     loop {
+//         match callstack.last() {
+//             None => return false,
+//             Some(x) => {
+//                 let (node_index, child) = x;
+//                 let node: &Node;
+//                 unsafe {
+//                     node = node_vec.get_unchecked(*node_index);
+//                 }
+//                 match node {
+//                     Node::Transition{ ref children } => {
+
+//                     },
+//                     Node::End => return true,
+//                 };
+//             }
+//         }
+//     }
+//     true
+// }
+
+
+fn recursive_pure_match(node_vec: &[Node], chars: &[char], node_index: &usize, char_index: usize) -> bool {
     let node: &Node;
     unsafe {
         node = node_vec.get_unchecked(*node_index);
@@ -37,7 +65,7 @@ fn pure_match(node_vec: &[Node], chars: &[char], node_index: &usize, char_index:
     match node {
         Node::Transition { children, .. } => {
             for child in children {
-                if pure_match(node_vec, chars, child, char_index) {
+                if recursive_pure_match(node_vec, chars, child, char_index) {
                     return true;
                 }
             }
@@ -53,7 +81,7 @@ fn pure_match(node_vec: &[Node], chars: &[char], node_index: &usize, char_index:
             }
             if characters.contains(to_match) {
                 for child in children {
-                    if pure_match(node_vec, chars, child, char_index + 1) {
+                    if recursive_pure_match(node_vec, chars, child, char_index + 1) {
                         return true;
                     }
                 }
@@ -77,7 +105,7 @@ fn pure_match(node_vec: &[Node], chars: &[char], node_index: &usize, char_index:
                 false
             } else {
                 for child in children {
-                    if pure_match(node_vec, chars, child, char_index + 1) {
+                    if recursive_pure_match(node_vec, chars, child, char_index + 1) {
                         return true;
                     }
                 }
@@ -96,7 +124,7 @@ fn pure_match(node_vec: &[Node], chars: &[char], node_index: &usize, char_index:
                 return false;
             } else {
                 for child in children {
-                    if pure_match(node_vec, chars, child, char_index + 1) {
+                    if recursive_pure_match(node_vec, chars, child, char_index + 1) {
                         return true;
                     }
                 }
@@ -106,7 +134,7 @@ fn pure_match(node_vec: &[Node], chars: &[char], node_index: &usize, char_index:
         Node::EndOfLine { children, .. } => {
             if char_index == chars.len() {
                 for child in children {
-                    if pure_match(node_vec, chars, child, char_index) {
+                    if recursive_pure_match(node_vec, chars, child, char_index) {
                         return true;
                     }
                 }
@@ -119,7 +147,7 @@ fn pure_match(node_vec: &[Node], chars: &[char], node_index: &usize, char_index:
             if *to_match == '\n' {
                 {
                     for child in children {
-                        if pure_match(node_vec, chars, child, char_index + 1) {
+                        if recursive_pure_match(node_vec, chars, child, char_index + 1) {
                             return true;
                         }
                     }
@@ -131,7 +159,7 @@ fn pure_match(node_vec: &[Node], chars: &[char], node_index: &usize, char_index:
         Node::BeginningOfLine { children, .. } => {
             if char_index == 0 {
                 for child in children {
-                    if pure_match(node_vec, chars, child, char_index) {
+                    if recursive_pure_match(node_vec, chars, child, char_index) {
                         return true;
                     }
                 }
@@ -144,7 +172,7 @@ fn pure_match(node_vec: &[Node], chars: &[char], node_index: &usize, char_index:
             if *to_match == '\n' {
                 {
                     for child in children {
-                        if pure_match(node_vec, chars, child, char_index + 1) {
+                        if recursive_pure_match(node_vec, chars, child, char_index + 1) {
                             return true;
                         }
                     }
@@ -163,7 +191,7 @@ fn pure_match(node_vec: &[Node], chars: &[char], node_index: &usize, char_index:
             }
             if to_match == character {
                 for child in children {
-                    if pure_match(node_vec, chars, child, char_index + 1) {
+                    if recursive_pure_match(node_vec, chars, child, char_index + 1) {
                         return true;
                     }
                 }
@@ -181,7 +209,7 @@ fn pure_match(node_vec: &[Node], chars: &[char], node_index: &usize, char_index:
             }
             if to_match != character {
                 for child in children {
-                    if pure_match(node_vec, chars, child, char_index + 1) {
+                    if recursive_pure_match(node_vec, chars, child, char_index + 1) {
                         return true;
                     }
                 }

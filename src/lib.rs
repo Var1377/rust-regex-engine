@@ -223,11 +223,11 @@ mod tests {
     #[test]
     fn difficult_real_world_tests() {
         let phone = Regex::new(r"^\+*\(?[0-9]+\)?[-\s\.0-9]*$");
-        let email = Regex::new(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z][A-Za-z]+");
+        let email = Regex::new(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}");
         assert_eq!(phone.match_str("+447777666555"), true);
         assert_eq!(phone.match_str("test@gmail.com"), false);
         assert_eq!(email.match_str("realemailaddress@realcompany.com"), true);
-        assert_eq!(email.match_str("100% fake email address here"), false);
+        assert_eq!(email.match_str("100%_fake_email_address_here"), false);
     }
 
     #[test]
@@ -286,6 +286,12 @@ mod tests {
         let r = Regex::new("[abc]{4,}");
         assert_eq!(r.match_str("abaaaaaaaaaaaaaacaad"), true);
         assert_eq!(r.match_str("aadbc"), false);
+    }
+
+    #[test]
+    fn escaped_character_curly_brackets() {
+        let r = Regex::new(r"\w{4,6}");
+        assert_eq!(r.match_str("abdc"), true);
     }
 
     #[test]
