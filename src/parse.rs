@@ -1,5 +1,15 @@
 use super::{constants::*, node::*, regex::Regex, utils::*};
 
+enum ParseMode {
+    SquareBrackets,
+    CurlyBrackets,
+    LookBehind,
+    LookAhead,
+}
+
+
+
+
 impl Regex {
     pub(crate) fn parse_expression(&mut self) {
         fn add_node(node: Node, node_vec: &mut Vec<Node>, callstack: &mut Vec<usize>, chars: &Vec<char>, char_index: &usize) {
@@ -116,6 +126,12 @@ impl Regex {
                             vec.extend(LOWERCASE);
                             vec.push('_');
                             add_node(Node::new_from_chars(vec, true), &mut node_vec, &mut callstack, &string, &string_index);
+                        }
+                        'b' => {
+
+                        }
+                        'B' => {
+
                         }
                         _ => {
                             add_character(character, &mut node_vec, &mut callstack, &string, &string_index);

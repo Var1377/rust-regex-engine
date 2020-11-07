@@ -2,17 +2,19 @@ use super::{constants::*, node::*};
 
 pub(crate) fn str_to_char_vec(string: &str) -> Vec<char> {
     let mut vec = Vec::with_capacity(string.len());
-    for c in string.bytes() {
-        vec.push(c as char);
-    }
+    string.bytes().for_each(
+        |v| {
+            vec.push(v as char);
+        }
+    );
     return vec;
 }
 
 pub(crate) fn char_vec_to_string(chars: &[char]) -> String {
     let mut s = String::new();
-    for character in chars {
-        s.push(*character);
-    }
+    chars.iter().for_each(|v| {
+        s.push(*v);
+    });
     return s;
 }
 
@@ -337,9 +339,9 @@ pub(crate) fn parse_curly_brackets(contents: &Vec<char>, string: &mut Vec<char>,
             }
         } else {
             let mut escaped = false;
-                if check_if_escaped(&string, *string_index - 1) {
-                    escaped = true;
-                }
+            if check_if_escaped(&string, *string_index - 1) {
+                escaped = true;
+            }
             let previous_character = string[*string_index - 1];
             for _ in 0..to_repeat - 1 {
                 string.insert(*string_index, previous_character);

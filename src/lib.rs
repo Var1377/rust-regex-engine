@@ -297,36 +297,30 @@ mod tests {
     #[test]
     fn basic_replace() {
         let r = Regex::new("hi");
-        assert_eq!("hello there",r.replace_first("hi there", "hello"));
+        assert_eq!("hello there", r.replace_first("hi there", "hello"));
     }
 
     #[test]
     fn replace_mapped() {
         let r = Regex::new("hi");
-        let x = r.replace_first_mapped(
-            "hi there",
-            |s| {
-                return String::from("hello");
-            }
-        );
+        let x = r.replace_first_mapped("hi there", |s| {
+            return String::from("hello");
+        });
         assert_eq!(x, "hello there");
     }
 
     #[test]
-    fn replace_all () {
+    fn replace_all() {
         let r = Regex::new("hi");
-        assert_eq!("hello there hello hey hello",r.replace_all("hi there hi hey hi", "hello"));
+        assert_eq!("hello there hello hey hello", r.replace_all("hi there hi hey hi", "hello"));
     }
 
     #[test]
     fn replace_all_mapped() {
         let r = Regex::new("hi");
-        let x = r.replace_all_mapped(
-            "hi there hi hey hi",
-            |s| {
-                return String::from("hello");
-            }
-        );
+        let x = r.replace_all_mapped("hi there hi hey hi", |s| {
+            return String::from("hello");
+        });
         assert_eq!(x, "hello there hello hey hello");
     }
 
@@ -343,6 +337,18 @@ mod tests {
     fn compile_benchmark(b: &mut Bencher) {
         b.iter(|| {
             let _i = test::black_box(Regex::new(r"^\+*\(?[0-9]+\)?[-\s\.0-9]*$"));
+        });
+    }
+
+    #[bench]
+    fn string_conversion(b: &mut Bencher) {
+        let mut string = String::new();
+        for i in 0..u16::MAX {
+            let i = i as u8;
+            string.push(i as char);
+        }
+        b.iter(|| {
+            let _i = test::black_box(super::utils::str_to_char_vec(&string));
         });
     }
 }

@@ -29,7 +29,6 @@ impl Regex {
     }
 }
 
-
 // fn iterative_pure_match(node_vec: &[Node], chars: &[char], start_index: usize) -> bool {
 //     // Callstack: Vec<(node_index, child, char_index)>
 //     let mut callstack = Vec::with_capacity(node_vec.len());
@@ -55,7 +54,6 @@ impl Regex {
 //     }
 //     true
 // }
-
 
 fn recursive_pure_match(node_vec: &[Node], chars: &[char], node_index: &usize, char_index: usize) -> bool {
     let node: &Node;
