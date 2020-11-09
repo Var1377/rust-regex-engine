@@ -1,23 +1,21 @@
-use super::{constants::*, node::*, regex::Regex, utils::*};
+use super::{constants::*, nfa::*, regex::Regex, utils::*};
 
+// Different Modes for the parser
 enum ParseMode {
-    SquareBrackets,
-    CurlyBrackets,
+    SquareBrackets(Vec<char>),
+    CurlyBrackets(Vec<char>),
     LookBehind,
     LookAhead,
+    CollectingUnicodeValue(),
 }
-
-
-
 
 impl Regex {
     pub(crate) fn parse_expression(&mut self) {
         fn add_node(node: Node, node_vec: &mut Vec<Node>, callstack: &mut Vec<usize>, chars: &Vec<char>, char_index: &usize) {
             if char_index > &0 {
                 let lookback = chars[char_index - 1];
-                match lookback {
-                    '(' | '|' => callstack.push(callstack.last().unwrap().clone()),
-                    _ => {}
+                if lookback == '(' || lookback == '|' && !check_if_escaped(chars, char_index - 1) {
+                    callstack.push(callstack.last().unwrap().clone());
                 }
             }
             node_vec.push(node);
@@ -127,12 +125,8 @@ impl Regex {
                             vec.push('_');
                             add_node(Node::new_from_chars(vec, true), &mut node_vec, &mut callstack, &string, &string_index);
                         }
-                        'b' => {
-
-                        }
-                        'B' => {
-
-                        }
+                        'b' => {}
+                        'B' => {}
                         _ => {
                             add_character(character, &mut node_vec, &mut callstack, &string, &string_index);
                         }
@@ -379,7 +373,10 @@ impl Regex {
                                     let old = callstack.pop().unwrap();
                                     let mut old_node = node_vec.get(old).unwrap().clone();
                                     match new_transition1 {
-                                        Node::Transition { ref mut children } => {
+                                        Node::Transition {
+                                            ref mut children,
+                                            ref behaviour,
+                                        } => {
                                             children.push(node_vec.len());
                                             children.push(node_vec.len() + 1);
                                         }

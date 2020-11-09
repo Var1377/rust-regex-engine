@@ -1,4 +1,4 @@
-#![allow(dead_code, unused_mut, unused_variables)]
+#![allow(dead_code, unused_mut, unused_variables, unused_imports)]
 #![feature(test)]
 
 extern crate test;
@@ -325,11 +325,20 @@ mod tests {
     }
 
     #[bench]
-    fn match_benchmark(b: &mut Bencher) {
+    fn iter_match_benchmark(b: &mut Bencher) {
         let phone = Regex::new(r"^\+*\(?[0-9]+\)?[-\s\.0-9]*$");
         b.iter(|| {
-            assert_eq!(phone.match_str("+447777-666-555"), true);
-            assert_eq!(phone.match_str("test@gmail.com"), false);
+            assert_eq!(phone.match_str_iter("+447777-666-555"), true);
+            assert_eq!(phone.match_str_iter("test@gmail.com"), false);
+        });
+    }
+
+    #[bench]
+    fn rec_match_benchmark(b: &mut Bencher) {
+        let phone = Regex::new(r"^\+*\(?[0-9]+\)?[-\s\.0-9]*$");
+        b.iter(|| {
+            assert_eq!(phone.match_str_recursive("+447777-666-555"), true);
+            assert_eq!(phone.match_str_recursive("test@gmail.com"), false);
         });
     }
 
@@ -340,24 +349,80 @@ mod tests {
         });
     }
 
-    #[bench]
-    fn string_conversion(b: &mut Bencher) {
-        let mut string = String::new();
-        for i in 0..u16::MAX {
-            let i = i as u8;
-            string.push(i as char);
-        }
-        b.iter(|| {
-            let _i = test::black_box(super::utils::str_to_char_vec(&string));
-        });
-    }
+    // enum Test {
+    //     One,
+    //     Two(u8),
+    //     Three{n: u8}
+    // }
+
+    // #[bench]
+    // fn enum_match(b: &mut Bencher) {
+    //     let mut vec = vec![];
+    //     for i in 0..1000 {
+    //         if i % 3 == 0 {
+    //             vec.push(Test::Three{n: 3})
+    //         } else if i % 2 == 0 {
+    //             vec.push(Test::Two(2));
+    //         } else {
+    //             vec.push(Test::One);
+    //         }
+    //     }
+    //     let mut x = test::black_box(0);
+    //     b.iter(
+    //         || {
+    //             for i in 0..1000 {
+    //                 match vec[i] {
+    //                     Test::One => x += 1,
+    //                     Test::Two(n) => x += n,
+    //                     Test::Three {ref n} => x += n
+    //                 }
+    //             }
+    //         }
+    //     )
+    // }
+
+    // #[bench]
+    // fn vec_index_speed(b: &mut Bencher) {
+    //     let vec = vec![128; 1000];
+    //     b.iter(|| {
+    //         for i in 0..1000 {
+    //             unsafe {
+    //                 let _b = test::black_box(vec.get_unchecked(i));
+    //             }
+    //         }
+    //     })
+    // }
+
+    // #[bench]
+    // fn rc_deref_speed(b: &mut Bencher) {
+    //     let rc = std::rc::Rc::new(128);
+    //     b.iter(|| {
+    //         for _ in 0..1000 {
+    //             let _b = test::black_box(*rc);
+    //         }
+    //     })
+    // }
+
+    // #[bench]
+    // fn string_conversion(b: &mut Bencher) {
+    //     let mut string = String::new();
+    //     for i in 0..u16::MAX {
+    //         let i = i as u8;
+    //         string.push(i as char);
+    //     }
+    //     b.iter(|| {
+    //         let _i = test::black_box(super::utils::str_to_char_vec(&string));
+    //     });
+    // }
 }
 
 pub mod config;
 mod constants;
+mod iterative_match;
 mod matcher;
-mod node;
+mod nfa;
 mod parse;
+mod recursive_match;
 pub mod regex;
 mod replace;
 mod utils;

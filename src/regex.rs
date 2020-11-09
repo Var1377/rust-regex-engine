@@ -1,5 +1,5 @@
 use super::config::*;
-use super::node::*;
+use super::nfa::*;
 
 #[derive(Clone, Debug)]
 pub struct Regex {

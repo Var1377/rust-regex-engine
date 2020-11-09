@@ -1,12 +1,10 @@
-use super::{constants::*, node::*};
+use super::{constants::*, nfa::*};
 
 pub(crate) fn str_to_char_vec(string: &str) -> Vec<char> {
     let mut vec = Vec::with_capacity(string.len());
-    string.bytes().for_each(
-        |v| {
-            vec.push(v as char);
-        }
-    );
+    string.bytes().for_each(|v| {
+        vec.push(v as char);
+    });
     return vec;
 }
 
