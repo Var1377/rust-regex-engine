@@ -2,18 +2,15 @@ use super::{constants::*, nfa::*};
 
 pub(crate) fn str_to_char_vec(string: &str) -> Vec<char> {
     let mut vec = Vec::with_capacity(string.len());
-    string.bytes().for_each(|v| {
-        vec.push(v as char);
+    let bytes = string.as_bytes();
+    string.chars().for_each(|v| {
+        vec.push(v);
     });
     return vec;
 }
 
 pub(crate) fn char_vec_to_string(chars: &[char]) -> String {
-    let mut s = String::new();
-    chars.iter().for_each(|v| {
-        s.push(*v);
-    });
-    return s;
+    chars.iter().collect::<String>()
 }
 
 pub(crate) fn parse_range(c1: char, c2: char, exclusive: bool) -> Node {
@@ -26,7 +23,7 @@ pub(crate) fn parse_range(c1: char, c2: char, exclusive: bool) -> Node {
             }
         }
     }
-    return Node::new_from_chars(range, exclusive);
+    return Node::new_from_chars(&range, exclusive);
 }
 
 pub fn previous_char_is_closing_bracket(index: &usize, chars: &[char]) -> bool {
@@ -47,30 +44,31 @@ pub fn previous_char_is_closing_bracket(index: &usize, chars: &[char]) -> bool {
 
 pub(crate) fn parse_range_character(c: char) -> Node {
     match c {
-        'd' => return Node::new_from_chars(DIGITS.to_vec(), false),
-        'D' => return Node::new_from_chars(DIGITS.to_vec(), true),
+        'd' => return Node::new_from_chars(DIGITS, false),
+        'D' => return Node::new_from_chars(DIGITS, true),
         'w' => {
             let mut vec = DIGITS.to_vec();
-            vec.extend(UPPERCASE.to_vec());
-            vec.extend(LOWERCASE.to_vec());
+            vec.extend(UPPERCASE);
+            vec.extend(LOWERCASE);
             vec.push('_');
-            return Node::new_from_chars(vec, false);
+            return Node::new_from_chars(&vec, false);
         }
         'W' => {
             let mut vec = DIGITS.to_vec();
-            vec.extend(UPPERCASE.to_vec());
-            vec.extend(LOWERCASE.to_vec());
+            vec.extend(UPPERCASE);
+            vec.extend(LOWERCASE);
             vec.push('_');
-            return Node::new_from_chars(vec, true);
+            return Node::new_from_chars(&vec, true);
         }
-        's' => return Node::new_from_chars(WHITESPACE.to_vec(), false),
-        'S' => return Node::new_from_chars(WHITESPACE.to_vec(), true),
-
+        's' => return Node::new_from_chars(WHITESPACE, false),
+        'S' => return Node::new_from_chars(WHITESPACE, true),
+        'b' => return Node::WordBoundary { children: vec![] },
+        'B' => return Node::NotWordBoundary { children: vec![] },
         _ => panic!("Range character not supported"),
     };
 }
 
-pub(crate) fn parse_square_brackets(chars: Vec<char>, node_vec: &mut Vec<Node>, callstack: &mut Vec<usize>) -> Vec<char> {
+pub(crate) fn parse_square_brackets(chars: &mut Vec<char>, node_vec: &mut Vec<Node>, callstack: &mut Vec<usize>) -> Vec<char> {
     // println!("Square Expression: {:?}", chars);
     let before = Node::new_transition();
     let before_index = node_vec.len();
@@ -142,47 +140,8 @@ pub(crate) fn parse_square_brackets(chars: Vec<char>, node_vec: &mut Vec<Node>, 
             let lookback = rest_of_chars[i - 1];
             match lookback {
                 BACKSLASH => match character {
-                    'd' => {
-                        if exclusive {
-                            nodes.push(parse_range_character('D'));
-                        } else {
-                            nodes.push(parse_range_character('d'));
-                        }
-                    }
-                    'D' => {
-                        if exclusive {
-                            nodes.push(parse_range_character('d'));
-                        } else {
-                            nodes.push(parse_range_character('D'));
-                        }
-                    }
-                    'w' => {
-                        if exclusive {
-                            nodes.push(parse_range_character('W'));
-                        } else {
-                            nodes.push(parse_range_character('w'));
-                        }
-                    }
-                    'W' => {
-                        if exclusive {
-                            nodes.push(parse_range_character('w'));
-                        } else {
-                            nodes.push(parse_range_character('W'));
-                        }
-                    }
-                    's' => {
-                        if exclusive {
-                            nodes.push(parse_range_character('S'));
-                        } else {
-                            nodes.push(parse_range_character('s'));
-                        }
-                    }
-                    'S' => {
-                        if exclusive {
-                            nodes.push(parse_range_character('s'));
-                        } else {
-                            nodes.push(parse_range_character('S'));
-                        }
+                    'd' | 'D' | 'b' | 'B' | 'w' | 'W' | 's' | 'S' => {
+                        nodes.push(parse_range_character(character));
                     }
                     _ => nodes.push(Node::new_from_char(character, exclusive)),
                 },
@@ -199,7 +158,7 @@ pub(crate) fn parse_square_brackets(chars: Vec<char>, node_vec: &mut Vec<Node>, 
         }
         i += 1;
     }
-    nodes.push(Node::new_from_chars(final_range, exclusive));
+    nodes.push(Node::new_from_chars(&final_range, exclusive));
     for mut node in nodes {
         let node_vec_len = node_vec.len();
         match node_vec.get_mut(before_index).unwrap() {
@@ -208,41 +167,24 @@ pub(crate) fn parse_square_brackets(chars: Vec<char>, node_vec: &mut Vec<Node>, 
             }
             _ => panic!(),
         }
-        match node {
-            Node::Inclusive { ref mut children, .. }
-            | Node::Exclusive { ref mut children, .. }
-            | Node::Transition { ref mut children, .. }
-            | Node::BeginningOfLine { ref mut children }
-            | Node::EndOfLine { ref mut children }
-            | Node::MatchOne { ref mut children, .. }
-            | Node::MatchAll { ref mut children }
-            | Node::NotMatchOne { ref mut children, .. } => {
-                children.push(after_index);
-            }
-            Node::End => panic!(),
-        }
+        node.push_child(after_index);
         node_vec.push(node);
     }
     let to_connect = callstack.pop().unwrap();
     let to_connect = node_vec.get_mut(to_connect).unwrap();
-    match to_connect {
-        Node::Inclusive { ref mut children, .. }
-        | Node::Exclusive { ref mut children, .. }
-        | Node::Transition { ref mut children, .. }
-        | Node::BeginningOfLine { ref mut children }
-        | Node::EndOfLine { ref mut children }
-        | Node::MatchOne { ref mut children, .. }
-        | Node::MatchAll { ref mut children }
-        | Node::NotMatchOne { ref mut children, .. } => {
-            children.push(before_index);
-        }
-        Node::End => panic!(),
-    }
+    to_connect.push_child(before_index);
     callstack.push(after_index);
     return vec![];
 }
 
-pub(crate) fn parse_curly_brackets(contents: &Vec<char>, string: &mut Vec<char>, string_index: &usize) {
+pub(crate) fn parse_curly_brackets(
+    contents: &Vec<char>,
+    string: &mut Vec<char>,
+    string_index: &usize,
+    node_vec: &mut Vec<Node>,
+    callstack: &mut Vec<usize>,
+    lazy: bool,
+) {
     // println!("{:?}", contents);
     let pos_of_comma = contents.iter().position(|c| *c == ',');
     if let Some(p) = pos_of_comma {
@@ -252,15 +194,38 @@ pub(crate) fn parse_curly_brackets(contents: &Vec<char>, string: &mut Vec<char>,
             for i in 0..p {
                 s1.push(contents[i]);
             }
-            let to_repeat = s1.parse::<usize>().unwrap();
+            let to_repeat = s1.parse::<usize>().unwrap() - 1;
             if previous_char_is_closing_bracket(string_index, string) {
-                let characters = get_enclosing_brackets_to_repeat(string, string_index - 1);
-                string.insert(*string_index, '+');
-                for _ in 0..to_repeat - 1 {
-                    for character in &characters {
-                        string.insert(*string_index, *character);
+                // println!("{:?}", node_vec);
+                for _ in 0..to_repeat {
+                    let to_connect = callstack.pop().unwrap();
+                    let before_index = to_connect - 1;
+                    let mut new_nodes = vec![];
+                    let new_before_index = node_vec.len();
+                    for i in before_index..node_vec.len() {
+                        new_nodes.push(node_vec.get(i).unwrap().clone());
                     }
+                    node_vec.get_mut(to_connect).unwrap().get_children_mut().unwrap().push(new_before_index);
+                    for i in 0..new_nodes.len() {
+                        let len = new_nodes.len();
+                        let node = new_nodes.get_mut(i).unwrap();
+                        match node.get_children_mut() {
+                            Some(c) => {
+                                for child in node.get_children_mut().unwrap() {
+                                    *child += len;
+                                }
+                            },
+                            None => continue
+                        }
+                    }
+                    callstack.push(node_vec.len() + 1);
+                    node_vec.extend(new_nodes);
+                    // println!("{:?}", node_vec);
                 }
+                let last_node_index = callstack.last().unwrap();
+                let after = node_vec.get_mut(*last_node_index).unwrap();
+                let before_index = last_node_index - 1;
+                after.get_transition_children_mut().push(before_index);
             } else {
                 let mut escaped = false;
                 if check_if_escaped(&string, *string_index - 1) {
@@ -268,7 +233,7 @@ pub(crate) fn parse_curly_brackets(contents: &Vec<char>, string: &mut Vec<char>,
                 }
                 string.insert(*string_index, '+');
                 let previous_character = string[*string_index - 1];
-                for _ in 0..to_repeat - 1 {
+                for _ in 0..to_repeat {
                     string.insert(*string_index, previous_character);
                     if escaped {
                         string.insert(*string_index, BACKSLASH);
@@ -287,17 +252,57 @@ pub(crate) fn parse_curly_brackets(contents: &Vec<char>, string: &mut Vec<char>,
             let int1 = s1.parse::<usize>().unwrap();
             let int2 = s2.parse::<usize>().unwrap() - int1;
             if previous_char_is_closing_bracket(string_index, string) {
-                let characters = get_enclosing_brackets_to_repeat(string, *string_index - 1);
-                for _ in 0..int2 {
-                    string.insert(*string_index, '?');
-                    for character in &characters {
-                        string.insert(*string_index, *character);
-                    }
-                }
                 for _ in 0..int1 - 1 {
-                    for character in &characters {
-                        string.insert(*string_index, *character);
+                    let to_connect = callstack.pop().unwrap();
+                    let before_index = to_connect - 1;
+                    let mut new_nodes = vec![];
+                    let new_before_index = node_vec.len();
+                    for i in before_index..node_vec.len() {
+                        new_nodes.push(node_vec.get(i).unwrap().clone());
                     }
+                    node_vec.get_mut(to_connect).unwrap().get_children_mut().unwrap().push(new_before_index);
+                    for i in 0..new_nodes.len() {
+                        let len = new_nodes.len();
+                        let node = new_nodes.get_mut(i).unwrap();
+                        match node.get_children_mut() {
+                            Some(c) => {
+                                for child in node.get_children_mut().unwrap() {
+                                    *child += len;
+                                }
+                            },
+                            None => continue
+                        }
+                    }
+                    callstack.push(node_vec.len() + 1);
+                    node_vec.extend(new_nodes);
+                }
+                for _ in 0..int2 {
+                    let to_connect = callstack.pop().unwrap();
+                    let before_index = to_connect - 1;
+                    let mut new_nodes = vec![];
+                    let new_before_index = node_vec.len();
+                    for i in before_index..node_vec.len() {
+                        new_nodes.push(node_vec.get(i).unwrap().clone());
+                    }
+                    node_vec.get_mut(to_connect).unwrap().get_children_mut().unwrap().push(new_before_index);
+                    for i in 0..new_nodes.len() {
+                        let len = new_nodes.len();
+                        let node = new_nodes.get_mut(i).unwrap();
+                        match node.get_children_mut() {
+                            Some(c) => {
+                                for child in node.get_children_mut().unwrap() {
+                                    *child += len;
+                                }
+                            },
+                            None => continue
+                        }
+                    }
+                    callstack.push(node_vec.len() + 1);
+                    node_vec.extend(new_nodes);
+                    let before_index = callstack.last().unwrap() - 1;
+                    let after_index = callstack.last().unwrap().clone();
+                    let before = node_vec.get_mut(before_index).unwrap();
+                    before.push_child(after_index);
                 }
             } else {
                 let mut escaped = false;
@@ -329,11 +334,29 @@ pub(crate) fn parse_curly_brackets(contents: &Vec<char>, string: &mut Vec<char>,
         println!("{}", s1);
         let to_repeat = s1.parse::<usize>().unwrap();
         if previous_char_is_closing_bracket(string_index, string) {
-            let characters = get_enclosing_brackets_to_repeat(string, string_index - 1);
             for _ in 0..to_repeat - 1 {
-                for character in &characters {
-                    string.insert(*string_index, *character);
+                let to_connect = callstack.pop().unwrap();
+                let before_index = to_connect - 1;
+                let mut new_nodes = vec![];
+                let new_before_index = node_vec.len();
+                for i in before_index..node_vec.len() {
+                    new_nodes.push(node_vec.get(i).unwrap().clone());
                 }
+                node_vec.get_mut(to_connect).unwrap().get_children_mut().unwrap().push(new_before_index);
+                for i in 0..new_nodes.len() {
+                    let len = new_nodes.len();
+                    let node = new_nodes.get_mut(i).unwrap();
+                    match node.get_children_mut() {
+                        Some(c) => {
+                            for child in node.get_children_mut().unwrap() {
+                                *child += len;
+                            }
+                        },
+                        None => continue
+                    }
+                }
+                callstack.push(node_vec.len() + 1);
+                node_vec.extend(new_nodes);
             }
         } else {
             let mut escaped = false;
@@ -349,7 +372,6 @@ pub(crate) fn parse_curly_brackets(contents: &Vec<char>, string: &mut Vec<char>,
             }
         }
     }
-    println!("{:?}", string);
 }
 
 fn get_enclosing_brackets_to_repeat(string: &[char], mut index: usize) -> Vec<char> {
@@ -407,4 +429,18 @@ pub(crate) fn check_if_escaped(string: &[char], index: usize) -> bool {
         }
     }
     return false;
+}
+
+pub(crate) fn add_node(node: Node, node_vec: &mut Vec<Node>, callstack: &mut Vec<usize>) {
+    node_vec.push(node);
+    let len = node_vec.len() - 1;
+    if let Some(to_connect) = callstack.pop() {
+        let node = node_vec.get_mut(to_connect).unwrap();
+        node.push_child(len);
+    }
+    callstack.push(len);
+}
+
+pub(crate) fn add_character(c: char, node_vec: &mut Vec<Node>, callstack: &mut Vec<usize>) {
+    add_node(Node::new_from_char(c, false), node_vec, callstack)
 }

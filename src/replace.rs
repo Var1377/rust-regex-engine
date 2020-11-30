@@ -1,84 +1,83 @@
-use super::recursive_match::*;
 use super::regex::*;
 use super::utils::*;
 
 impl Regex {
     pub fn replace_first(&self, s: &str, r: &str) -> String {
-        let chars = str_to_char_vec(s);
-        let mut indices: Option<(usize, usize)> = None;
-        for i in 0..chars.len() {
-            match get_index_match(&self.node_vec, &chars, &0, i) {
-                None => (),
-                Some(x) => {
-                    indices = Some((i, x));
-                    break;
-                }
-            }
-        }
-        if let Some(x) = indices {
-            let replace_with = str_to_char_vec(r);
-            let (start, end) = x;
-            return char_vec_to_string(&replace_range(start, end, &replace_with, &chars));
-        }
+        // let chars = str_to_char_vec(s);
+        // let mut indices: Option<(usize, usize)> = None;
+        // for i in 0..chars.len() {
+        //     match get_index_match(&self.node_vec, &chars, &0, i) {
+        //         None => (),
+        //         Some(x) => {
+        //             indices = Some((i, x));
+        //             break;
+        //         }
+        //     }
+        // }
+        // if let Some(x) = indices {
+        //     let replace_with = str_to_char_vec(r);
+        //     let (start, end) = x;
+        //     return char_vec_to_string(&replace_range(start, end, &replace_with, &chars));
+        // }
         return s.to_string();
     }
 
     pub fn replace_first_mapped<F: FnMut(String) -> String>(&self, s: &str, mut func: F) -> String {
-        let chars = str_to_char_vec(s);
-        let mut indices: Option<(usize, usize)> = None;
-        for i in 0..chars.len() {
-            if let Some(x) = get_index_match(&self.node_vec, &chars, &0, i) {
-                indices = Some((i, x));
-                break;
-            }
-        }
-        if let Some(x) = indices {
-            let (start, end) = x;
-            return char_vec_to_string(&replace_mapped(start, end, &mut func, &chars));
-        }
+        // let chars = str_to_char_vec(s);
+        // let mut indices: Option<(usize, usize)> = None;
+        // for i in 0..chars.len() {
+        //     if let Some(x) = get_index_match(&self.node_vec, &chars, &0, i) {
+        //         indices = Some((i, x));
+        //         break;
+        //     }
+        // }
+        // if let Some(x) = indices {
+        //     let (start, end) = x;
+        //     return char_vec_to_string(&replace_mapped(start, end, &mut func, &chars));
+        // }
         return s.to_string();
     }
 
     pub fn replace_all(&self, s: &str, r: &str) -> String {
         let mut chars = str_to_char_vec(s);
-        let mut indices: Vec<(usize, usize)> = Vec::new();
-        let mut i = 0usize;
-        while i < chars.len() {
-            if let Some(end) = get_index_match(&self.node_vec, &chars, &0, i) {
-                indices.push((i, end));
-                i = end;
-            }
-            i += 1;
-        }
-        indices.reverse();
-        let replace_with = str_to_char_vec(r);
-        for (start, end) in indices {
-            chars = replace_range(start, end, &replace_with, &chars);
-        }
+        // let mut indices: Vec<(usize, usize)> = Vec::new();
+        // let mut i = 0usize;
+        // while i < chars.len() {
+        //     if let Some(end) = get_index_match(&self.node_vec, &chars, &0, i) {
+        //         indices.push((i, end));
+        //         i = end;
+        //     }
+        //     i += 1;
+        // }
+        // indices.reverse();
+        // let replace_with = str_to_char_vec(r);
+        // for (start, end) in indices {
+        //     chars = replace_range(start, end, &replace_with, &chars);
+        // }
         return char_vec_to_string(&chars);
     }
 
     pub fn replace_all_mapped<F: FnMut(String) -> String>(&self, s: &str, mut func: F) -> String {
         let mut chars = str_to_char_vec(s);
-        let mut indices: Vec<(usize, usize)> = Vec::new();
-        let mut i = 0usize;
-        while i < chars.len() {
-            match get_index_match(&self.node_vec, &chars, &0, i) {
-                None => (),
-                Some(end) => {
-                    indices.push((i, end));
-                    i = end;
-                }
-            }
-            i += 1;
-        }
-        if indices.is_empty() {
-            return s.to_string();
-        }
-        indices.reverse();
-        for (start, end) in indices {
-            chars = replace_mapped(start, end, &mut func, &chars);
-        }
+        // let mut indices: Vec<(usize, usize)> = Vec::new();
+        // let mut i = 0usize;
+        // while i < chars.len() {
+        //     match get_index_match(&self.node_vec, &chars, &0, i) {
+        //         None => (),
+        //         Some(end) => {
+        //             indices.push((i, end));
+        //             i = end;
+        //         }
+        //     }
+        //     i += 1;
+        // }
+        // if indices.is_empty() {
+        //     return s.to_string();
+        // }
+        // indices.reverse();
+        // for (start, end) in indices {
+        //     chars = replace_mapped(start, end, &mut func, &chars);
+        // }
         return char_vec_to_string(&chars);
     }
 }

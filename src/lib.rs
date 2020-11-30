@@ -1,6 +1,7 @@
-#![allow(dead_code, unused_mut, unused_variables, unused_imports)]
+#![allow(dead_code, unused_mut, unused_imports, unused_variables, unreachable_patterns)]
 #![feature(test)]
 
+extern crate fxhash;
 extern crate test;
 
 #[cfg(test)]
@@ -9,11 +10,6 @@ mod tests {
     use config::*;
     use regex::Regex;
     use test::Bencher;
-
-    const GLOBAL_CONFIG: RegexConfig = RegexConfig {
-        case_sensitive: true,
-        location: SearchLocation::Global,
-    };
 
     #[test]
     fn compile_test() {
@@ -50,8 +46,8 @@ mod tests {
 
     #[test]
     fn in_the_middle() {
-        // Needed if you want to perform a global search
-        let r = Regex::new_with_config("abc", GLOBAL_CONFIG);
+        // Global search enabled by default
+        let r = Regex::new("abc");
         // println!("{:?}", r.node_vec);
         assert_eq!(r.match_str("ksjfdweriwukjdkabcdkjaifejs"), true);
         assert_eq!(r.match_str("ksjfdweriwukjdkadkbjaiabfcejs"), false);
@@ -178,11 +174,11 @@ mod tests {
     #[test]
     fn question_mark() {
         let r = Regex::new("abcde?f");
-        // println!("{:?}", r.node_vec);
-        assert_eq!(r.match_str("abcdefg"), true);
-        assert_eq!(r.match_str("abcdfg"), true);
-        assert_eq!(r.match_str("abcfge"), false);
-        assert_eq!(r.match_str("abcfge"), false);
+        println!("{:?}", r.node_vec);
+        // assert_eq!(r.match_str("abcdefg"), true);
+        // assert_eq!(r.match_str("abcdfg"), true);
+        // assert_eq!(r.match_str("abcfge"), false);
+        // assert_eq!(r.match_str("abcfge"), false);
     }
 
     #[test]
@@ -271,7 +267,7 @@ mod tests {
     fn brackets_curly_brackets_both() {
         let r = Regex::new("^(a|b|c){4,6}$");
         assert_eq!(r.match_str("abcb"), true);
-        // assert_eq!(r.match_str("aab"), false);
+        assert_eq!(r.match_str("aab"), false);
     }
 
     #[test]
@@ -295,50 +291,90 @@ mod tests {
     }
 
     #[test]
-    fn basic_replace() {
-        let r = Regex::new("hi");
-        assert_eq!("hello there", r.replace_first("hi there", "hello"));
+    fn lookahead() {
+        let r = Regex::new("^abc(?=def)d");
+        assert_eq!(r.match_str("abcdef"), true);
+        assert_eq!(r.match_str("abcdeg"), false);
     }
 
     #[test]
-    fn replace_mapped() {
-        let r = Regex::new("hi");
-        let x = r.replace_first_mapped("hi there", |s| {
-            return String::from("hello");
-        });
-        assert_eq!(x, "hello there");
+    fn negative_lookahead() {
+        let r = Regex::new("^abc(?!def)d");
+        assert_eq!(r.match_str("abcdef"), false);
+        assert_eq!(r.match_str("abcdeg"), true);
+    }
+
+    // #[test]
+    // fn basic_replace() {
+    //     let r = Regex::new("hi");
+    //     assert_eq!("hello there", r.replace_first("hi there", "hello"));
+    // }
+
+    // #[test]
+    // fn replace_mapped() {
+    //     let r = Regex::new("hi");
+    //     let x = r.replace_first_mapped("hi there", |s| {
+    //         println!("{}", &s);
+    //         return String::from("hello");
+    //     });
+    //     assert_eq!(x, "hello there");
+    // }
+
+    // #[test]
+    // fn replace_all() {
+    //     let r = Regex::new("hi");
+    //     assert_eq!("hello there hello hey hello", r.replace_all("hi there hi hey hi", "hello"));
+    // }
+
+    // #[test]
+    // fn replace_all_mapped() {
+    //     let r = Regex::new("hi");
+    //     let x = r.replace_all_mapped("hi there hi hey hi", |s| {
+    //         println!("{}", &s);
+    //         return String::from("hello");
+    //     });
+    //     assert_eq!(x, "hello there hello hey hello");
+    // }
+
+    #[test]
+    fn atomic_groups() {
+        let r = Regex::new("a+(?>b)a");
+        println!("{:?}", r.node_vec);
+        assert_eq!(r.match_str("aaaaaaaba"), true);
+        assert_eq!(r.match_str("aaaaaaabb"), false);
     }
 
     #[test]
-    fn replace_all() {
-        let r = Regex::new("hi");
-        assert_eq!("hello there hello hey hello", r.replace_all("hi there hi hey hi", "hello"));
+    fn lazy() {
+        let r = Regex::new("[ab]+?(?>b)c");
+        assert_eq!(r.match_str("aba"), false);
+        assert_eq!(r.match_str("aabc"), true);
     }
 
     #[test]
-    fn replace_all_mapped() {
-        let r = Regex::new("hi");
-        let x = r.replace_all_mapped("hi there hi hey hi", |s| {
-            return String::from("hello");
-        });
-        assert_eq!(x, "hello there hello hey hello");
+    fn recurse() {
+        let r = Regex::new(r"(?:a|b)(?R)?");
+        println!("{:?}", r.node_vec);
+        assert_eq!(r.match_str("aa"),true);
+        assert_eq!(r.match_str("baaaabaaaa"),true);
+        // Need a better test here
+        assert_eq!(r.match_str("c"),false);
     }
 
     #[bench]
-    fn iter_match_benchmark(b: &mut Bencher) {
+    fn match_benchmark_short(b: &mut Bencher) {
         let phone = Regex::new(r"^\+*\(?[0-9]+\)?[-\s\.0-9]*$");
         b.iter(|| {
-            assert_eq!(phone.match_str_iter("+447777-666-555"), true);
-            assert_eq!(phone.match_str_iter("test@gmail.com"), false);
+            assert_eq!(phone.match_str("+447777-666-555"), true);
+            assert_eq!(phone.match_str("test@gmail.com"), false);
         });
     }
 
     #[bench]
-    fn rec_match_benchmark(b: &mut Bencher) {
+    fn match_benchmark_long(b: &mut Bencher) {
         let phone = Regex::new(r"^\+*\(?[0-9]+\)?[-\s\.0-9]*$");
         b.iter(|| {
-            assert_eq!(phone.match_str_recursive("+447777-666-555"), true);
-            assert_eq!(phone.match_str_recursive("test@gmail.com"), false);
+            assert_eq!(phone.match_str("+447777-666-5555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555"), true);
         });
     }
 
@@ -349,80 +385,35 @@ mod tests {
         });
     }
 
-    // enum Test {
-    //     One,
-    //     Two(u8),
-    //     Three{n: u8}
-    // }
+    #[bench]
+    fn really_really_huge_bench(b: &mut Bencher) {
+        let r = Regex::new(r"[\w\.+-]+@[\w\.-]+\.[\w\.-]+");
+        let input = include_str!(r"../input_text.txt");
+        b.iter(|| {
+            let i = test::black_box(r.match_str(input));
+        })
+    }
 
-    // #[bench]
-    // fn enum_match(b: &mut Bencher) {
-    //     let mut vec = vec![];
-    //     for i in 0..1000 {
-    //         if i % 3 == 0 {
-    //             vec.push(Test::Three{n: 3})
-    //         } else if i % 2 == 0 {
-    //             vec.push(Test::Two(2));
-    //         } else {
-    //             vec.push(Test::One);
-    //         }
-    //     }
-    //     let mut x = test::black_box(0);
-    //     b.iter(
-    //         || {
-    //             for i in 0..1000 {
-    //                 match vec[i] {
-    //                     Test::One => x += 1,
-    //                     Test::Two(n) => x += n,
-    //                     Test::Three {ref n} => x += n
-    //                 }
-    //             }
-    //         }
-    //     )
-    // }
-
-    // #[bench]
-    // fn vec_index_speed(b: &mut Bencher) {
-    //     let vec = vec![128; 1000];
-    //     b.iter(|| {
-    //         for i in 0..1000 {
-    //             unsafe {
-    //                 let _b = test::black_box(vec.get_unchecked(i));
-    //             }
-    //         }
-    //     })
-    // }
-
-    // #[bench]
-    // fn rc_deref_speed(b: &mut Bencher) {
-    //     let rc = std::rc::Rc::new(128);
-    //     b.iter(|| {
-    //         for _ in 0..1000 {
-    //             let _b = test::black_box(*rc);
-    //         }
-    //     })
-    // }
-
-    // #[bench]
-    // fn string_conversion(b: &mut Bencher) {
-    //     let mut string = String::new();
-    //     for i in 0..u16::MAX {
-    //         let i = i as u8;
-    //         string.push(i as char);
-    //     }
-    //     b.iter(|| {
-    //         let _i = test::black_box(super::utils::str_to_char_vec(&string));
-    //     });
-    // }
+    #[bench]
+    fn test_str_to_char_conversion(b: &mut Bencher) {
+        let s = include_str!(r"../input_text.txt");
+        b.iter(|| {
+            let _ = test::black_box(super::utils::str_to_char_vec(s));
+        })
+    }
 }
 
+mod backtrack_matcher;
 pub mod config;
 mod constants;
-mod iterative_match;
+mod dfa_matcher;
 mod matcher;
 mod nfa;
+mod optimize;
+mod parallel_nfa;
 mod parse;
-mod recursive_match;
 pub mod regex;
 mod replace;
+mod unicode_ranges;
 mod utils;
+mod utf_8;
