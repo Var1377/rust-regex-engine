@@ -22,7 +22,7 @@ impl Regex {
         node_vec.push(Node::End);
         parse(&mut node_vec, str_to_char_vec(&self.expr));
         node_vec.shrink_to_fit();
-        // optimize(&mut node_vec);
+        optimize(&mut node_vec);
         self.node_vec = node_vec;
     }
 }
