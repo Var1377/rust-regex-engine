@@ -1,5 +1,5 @@
-use super::nfa::*;
 use super::fxhash::FxHashMap;
+use super::nfa::*;
 
 const OPTIMIZATION_PASSES: u8 = 3;
 
@@ -41,4 +41,8 @@ pub(crate) fn optimize(nodes: &mut Vec<Node>) {
             }
         }
     }
+    // for node in nodes.iter_mut() {
+    //     node.optimize();
+    // }
+    super::compiled_node::CompiledNode::compile(nodes.clone());
 }

@@ -1,5 +1,33 @@
 use super::{constants::*, nfa::*};
 
+pub fn remove_duplicates_without_sort<T: PartialEq + Eq + std::hash::Hash + Copy>(vec: &mut Vec<T>, set: &mut fxhash::FxHashSet<T>) {
+    // Linear time complexity and reuses allocations in the set
+
+    let mut i = 0usize;
+
+    while i < vec.len() {
+        let num = vec.get(i).unwrap();
+        if set.contains(&num) {
+            vec.remove(i);
+        } else {
+            set.insert(*num);
+            i += 1;
+        }
+    }
+
+    set.clear();
+    vec.shrink_to_fit();
+}
+
+#[test]
+fn tester() {
+    let mut vec: Vec<u8> = (1..=100u8).cycle().take(10000).collect();
+    // vec.sort_unstable();
+    remove_duplicates_without_sort(&mut vec, &mut fxhash::FxHashSet::default());
+    assert_eq!(vec.len(), 100);
+}
+
+
 pub(crate) fn str_to_char_vec(string: &str) -> Vec<char> {
     let mut vec = Vec::with_capacity(string.len());
     let bytes = string.as_bytes();
@@ -23,7 +51,7 @@ pub(crate) fn parse_range(c1: char, c2: char, exclusive: bool) -> Node {
             }
         }
     }
-    return Node::new_from_chars(&range, exclusive);
+    return Node::new_from_chars(range, exclusive);
 }
 
 pub fn previous_char_is_closing_bracket(index: &usize, chars: &[char]) -> bool {
@@ -44,24 +72,16 @@ pub fn previous_char_is_closing_bracket(index: &usize, chars: &[char]) -> bool {
 
 pub(crate) fn parse_range_character(c: char) -> Node {
     match c {
-        'd' => return Node::new_from_chars(DIGITS, false),
-        'D' => return Node::new_from_chars(DIGITS, true),
+        'd' => return Node::new_from_chars(DIGITS.to_vec(), false),
+        'D' => return Node::new_from_chars(DIGITS.to_vec(), true),
         'w' => {
-            let mut vec = DIGITS.to_vec();
-            vec.extend(UPPERCASE);
-            vec.extend(LOWERCASE);
-            vec.push('_');
-            return Node::new_from_chars(&vec, false);
+            return Node::new_from_chars(W.to_vec(), false);
         }
         'W' => {
-            let mut vec = DIGITS.to_vec();
-            vec.extend(UPPERCASE);
-            vec.extend(LOWERCASE);
-            vec.push('_');
-            return Node::new_from_chars(&vec, true);
+            return Node::new_from_chars(W.to_vec(), true);
         }
-        's' => return Node::new_from_chars(WHITESPACE, false),
-        'S' => return Node::new_from_chars(WHITESPACE, true),
+        's' => return Node::new_from_chars(WHITESPACE.to_vec(), false),
+        'S' => return Node::new_from_chars(WHITESPACE.to_vec(), true),
         'b' => return Node::WordBoundary { children: vec![] },
         'B' => return Node::NotWordBoundary { children: vec![] },
         _ => panic!("Range character not supported"),
@@ -143,7 +163,13 @@ pub(crate) fn parse_square_brackets(chars: &mut Vec<char>, node_vec: &mut Vec<No
                     'd' | 'D' | 'b' | 'B' | 'w' | 'W' | 's' | 'S' => {
                         nodes.push(parse_range_character(character));
                     }
-                    _ => nodes.push(Node::new_from_char(character, exclusive)),
+                    _ => {
+                        if exclusive {
+                            nodes.push(Node::new_from_char(character));
+                        } else {
+                            nodes.push(Node::new_from_chars(vec![character], exclusive));
+                        }
+                    }
                 },
                 _ => (),
             }
@@ -158,7 +184,7 @@ pub(crate) fn parse_square_brackets(chars: &mut Vec<char>, node_vec: &mut Vec<No
         }
         i += 1;
     }
-    nodes.push(Node::new_from_chars(&final_range, exclusive));
+    nodes.push(Node::new_from_chars(final_range, exclusive));
     for mut node in nodes {
         let node_vec_len = node_vec.len();
         match node_vec.get_mut(before_index).unwrap() {
@@ -214,8 +240,8 @@ pub(crate) fn parse_curly_brackets(
                                 for child in node.get_children_mut().unwrap() {
                                     *child += len;
                                 }
-                            },
-                            None => continue
+                            }
+                            None => continue,
                         }
                     }
                     callstack.push(node_vec.len() + 1);
@@ -269,8 +295,8 @@ pub(crate) fn parse_curly_brackets(
                                 for child in node.get_children_mut().unwrap() {
                                     *child += len;
                                 }
-                            },
-                            None => continue
+                            }
+                            None => continue,
                         }
                     }
                     callstack.push(node_vec.len() + 1);
@@ -293,8 +319,8 @@ pub(crate) fn parse_curly_brackets(
                                 for child in node.get_children_mut().unwrap() {
                                     *child += len;
                                 }
-                            },
-                            None => continue
+                            }
+                            None => continue,
                         }
                     }
                     callstack.push(node_vec.len() + 1);
@@ -351,8 +377,8 @@ pub(crate) fn parse_curly_brackets(
                             for child in node.get_children_mut().unwrap() {
                                 *child += len;
                             }
-                        },
-                        None => continue
+                        }
+                        None => continue,
                     }
                 }
                 callstack.push(node_vec.len() + 1);
@@ -442,5 +468,5 @@ pub(crate) fn add_node(node: Node, node_vec: &mut Vec<Node>, callstack: &mut Vec
 }
 
 pub(crate) fn add_character(c: char, node_vec: &mut Vec<Node>, callstack: &mut Vec<usize>) {
-    add_node(Node::new_from_char(c, false), node_vec, callstack)
+    add_node(Node::new_from_char(c), node_vec, callstack)
 }

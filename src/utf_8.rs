@@ -82,9 +82,7 @@ pub fn decode_utf8(src: &[u8]) -> Option<(char, usize)> {
             if 0b11_000000 & b2 != TAG_CONT {
                 return None;
             }
-            let cp = ((b0 & !TAG_THREE) as u32) << 12
-                | ((b1 & !TAG_CONT) as u32) << 6
-                | ((b2 & !TAG_CONT) as u32);
+            let cp = ((b0 & !TAG_THREE) as u32) << 12 | ((b1 & !TAG_CONT) as u32) << 6 | ((b2 & !TAG_CONT) as u32);
             match cp {
                 // char::from_u32 will disallow surrogate codepoints.
                 0x800..=0xFFFF => char::from_u32(cp).map(|cp| (cp, 3)),
@@ -105,10 +103,7 @@ pub fn decode_utf8(src: &[u8]) -> Option<(char, usize)> {
             if 0b11_000000 & b3 != TAG_CONT {
                 return None;
             }
-            let cp = ((b0 & !TAG_FOUR) as u32) << 18
-                | ((b1 & !TAG_CONT) as u32) << 12
-                | ((b2 & !TAG_CONT) as u32) << 6
-                | ((b3 & !TAG_CONT) as u32);
+            let cp = ((b0 & !TAG_FOUR) as u32) << 18 | ((b1 & !TAG_CONT) as u32) << 12 | ((b2 & !TAG_CONT) as u32) << 6 | ((b3 & !TAG_CONT) as u32);
             match cp {
                 0x10000..=0x10FFFF => char::from_u32(cp).map(|cp| (cp, 4)),
                 _ => None,
@@ -143,4 +138,23 @@ pub fn decode_last_utf8(src: &[u8]) -> Option<(char, usize)> {
 
 fn is_start_byte(b: u8) -> bool {
     b & 0b11_000000 != 0b1_0000000
+}
+
+pub trait CharLen {
+    fn len(&self) -> usize;
+}
+
+impl CharLen for char {
+    fn len(&self) -> usize {
+        let b = *self as u32;
+        if b <= 0x7F {
+            return 1
+        } else if b <= 0b110_11111 {
+            return 2
+        } else if b <= 0b1110_1111 {
+            return 3
+        } else {
+            return 4
+        };
+    }
 }

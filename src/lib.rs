@@ -1,6 +1,7 @@
 #![allow(dead_code, unused_mut, unused_imports, unused_variables, unreachable_patterns)]
 #![feature(test)]
 
+extern crate fnv;
 extern crate fxhash;
 extern crate test;
 
@@ -13,7 +14,7 @@ mod tests {
 
     #[test]
     fn compile_test() {
-        let _r = Regex::new("hi");
+        let _r = Regex::new("aabbccdd");
     }
 
     #[test]
@@ -166,7 +167,7 @@ mod tests {
 
     #[test]
     fn exclusive_w() {
-        let r = Regex::new(r"\W");
+        let r = Regex::new(r"\W+");
         assert_eq!(r.match_str("0a9sd87f0a8pwoeihnpva"), false);
         assert_eq!(r.match_str("                "), true);
     }
@@ -175,10 +176,10 @@ mod tests {
     fn question_mark() {
         let r = Regex::new("abcde?f");
         println!("{:?}", r.node_vec);
-        // assert_eq!(r.match_str("abcdefg"), true);
-        // assert_eq!(r.match_str("abcdfg"), true);
-        // assert_eq!(r.match_str("abcfge"), false);
-        // assert_eq!(r.match_str("abcfge"), false);
+        assert_eq!(r.match_str("abcdefg"), true);
+        assert_eq!(r.match_str("abcdfg"), true);
+        assert_eq!(r.match_str("abcfge"), false);
+        assert_eq!(r.match_str("abcfge"), false);
     }
 
     #[test]
@@ -295,6 +296,9 @@ mod tests {
         let r = Regex::new("^abc(?=def)d");
         assert_eq!(r.match_str("abcdef"), true);
         assert_eq!(r.match_str("abcdeg"), false);
+        let r = Regex::new(r"a(?=bcde|bc)bcef");
+        assert_eq!(r.match_str("abcef"), true);
+        assert_eq!(r.match_str("abcde"), false);
     }
 
     #[test]
@@ -303,38 +307,6 @@ mod tests {
         assert_eq!(r.match_str("abcdef"), false);
         assert_eq!(r.match_str("abcdeg"), true);
     }
-
-    // #[test]
-    // fn basic_replace() {
-    //     let r = Regex::new("hi");
-    //     assert_eq!("hello there", r.replace_first("hi there", "hello"));
-    // }
-
-    // #[test]
-    // fn replace_mapped() {
-    //     let r = Regex::new("hi");
-    //     let x = r.replace_first_mapped("hi there", |s| {
-    //         println!("{}", &s);
-    //         return String::from("hello");
-    //     });
-    //     assert_eq!(x, "hello there");
-    // }
-
-    // #[test]
-    // fn replace_all() {
-    //     let r = Regex::new("hi");
-    //     assert_eq!("hello there hello hey hello", r.replace_all("hi there hi hey hi", "hello"));
-    // }
-
-    // #[test]
-    // fn replace_all_mapped() {
-    //     let r = Regex::new("hi");
-    //     let x = r.replace_all_mapped("hi there hi hey hi", |s| {
-    //         println!("{}", &s);
-    //         return String::from("hello");
-    //     });
-    //     assert_eq!(x, "hello there hello hey hello");
-    // }
 
     #[test]
     fn atomic_groups() {
@@ -355,10 +327,17 @@ mod tests {
     fn recurse() {
         let r = Regex::new(r"(?:a|b)(?R)?");
         println!("{:?}", r.node_vec);
-        assert_eq!(r.match_str("aa"),true);
-        assert_eq!(r.match_str("baaaabaaaa"),true);
+        assert_eq!(r.match_str("aa"), true);
+        assert_eq!(r.match_str("baaaabaaaa"), true);
         // Need a better test here
-        assert_eq!(r.match_str("c"),false);
+        assert_eq!(r.match_str("c"), false);
+    }
+
+    #[test]
+    fn rly_huge_test() {
+        let r = Regex::new(r"[\w\.+-]+@[\w\.-]+\.[\w\.-]+");
+        let input: Vec<char> = include_str!(r"../input_text.txt").chars().collect();
+        println!("{}", r.match_indices_chars(&input).len());
     }
 
     #[bench]
@@ -378,7 +357,7 @@ mod tests {
         });
     }
 
-    #[bench]
+    // #[bench]
     fn compile_benchmark(b: &mut Bencher) {
         b.iter(|| {
             let _i = test::black_box(Regex::new(r"^\+*\(?[0-9]+\)?[-\s\.0-9]*$"));
@@ -388,13 +367,13 @@ mod tests {
     #[bench]
     fn really_really_huge_bench(b: &mut Bencher) {
         let r = Regex::new(r"[\w\.+-]+@[\w\.-]+\.[\w\.-]+");
-        let input = include_str!(r"../input_text.txt");
+        let input: Vec<char> = include_str!(r"../input_text.txt").chars().collect();
         b.iter(|| {
-            let i = test::black_box(r.match_str(input));
+            println!("{}", r.match_indices_chars(&input).len());
         })
     }
 
-    #[bench]
+    // #[bench]
     fn test_str_to_char_conversion(b: &mut Bencher) {
         let s = include_str!(r"../input_text.txt");
         b.iter(|| {
@@ -404,6 +383,7 @@ mod tests {
 }
 
 mod backtrack_matcher;
+mod compiled_node;
 pub mod config;
 mod constants;
 mod dfa_matcher;
@@ -414,6 +394,7 @@ mod parallel_nfa;
 mod parse;
 pub mod regex;
 mod replace;
+mod sorted_vec;
 mod unicode_ranges;
-mod utils;
 mod utf_8;
+mod utils;

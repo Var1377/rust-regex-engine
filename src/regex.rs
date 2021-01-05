@@ -1,13 +1,16 @@
 use super::config::*;
 use super::nfa::*;
 use std::alloc;
+use std::sync::Mutex;
+use super::compiled_node::CompiledNode;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug)]
 pub struct Regex {
     pub expr: String,
-    pub(crate) node_vec: Vec<Node>,
-    pub(crate) engine: MatchingEngine,
-    pub(crate) anchored: bool
+    pub(crate) node_vec: Vec<CompiledNode>,
+    pub(crate) root_node: usize,
+    pub(crate) engine: Mutex<MatchingEngine>,
+    pub(crate) anchored: bool,
 }
 
 impl Regex {
@@ -15,9 +18,10 @@ impl Regex {
     fn base() -> Self {
         return Regex {
             expr: String::new(),
-            node_vec: vec![Node::new_transition()],
-            engine: MatchingEngine::default(),
-            anchored: false
+            node_vec: vec![],
+            root_node: 0,
+            engine: Mutex::new(MatchingEngine::default()),
+            anchored: false,
         };
     }
 
@@ -25,7 +29,6 @@ impl Regex {
         let mut r = Self::base();
         r.expr = regex.to_string();
         r.parse_expression();
-        // r.compile();
         return r;
     }
 }
@@ -37,9 +40,7 @@ struct RegexSet {
 
 impl RegexSet {
     fn new(regexes: Vec<Regex>) -> Self {
-        return Self {
-            regexes
-        }
+        return Self { regexes };
     }
 }
 
@@ -49,7 +50,6 @@ use fxhash::FxHashMap;
 pub(crate) enum MatchingEngine {
     Backtrack {
         callstack: Vec<(usize, usize, usize, bool)>,
-        nodes: Vec<Node>,
         backref_data: FxHashMap<String, u32>,
     },
     HybridAutomata {},
@@ -65,32 +65,7 @@ impl Default for MatchingEngine {
     fn default() -> Self {
         return Self::Backtrack {
             callstack: vec![],
-            nodes: vec![],
-            backref_data: FxHashMap::default()
-        }
-    }
-}
-
-impl MatchingEngine {
-    fn pure_match(&mut self, string: &str) -> bool {
-        match self {
-            Self::Backtrack {
-                callstack,
-                nodes,
-                backref_data,
-            } => {
-                let ref s = str_to_char_vec(string);
-                for i in 0..s.len() {
-                    if backtrack_matcher::pure_match(nodes, &s, i, callstack) {
-                        return true;
-                    }
-                }
-                false
-            }
-            Self::ParallelNFA {} => unimplemented!(),
-            Self::PrecompiledDFA {} => unimplemented!(),
-            Self::OnlineDFA {} => unimplemented!(),
-            Self::HybridAutomata {} => unimplemented!(),
-        }
+            backref_data: FxHashMap::default(),
+        };
     }
 }

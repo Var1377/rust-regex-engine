@@ -8,3 +8,5 @@ edition = "2018"
 
 [dependencies]
 fxhash = "0.2.1"
+fnv = "1.0.7"
+derivative = "2.1.3"

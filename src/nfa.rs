@@ -1,239 +1,262 @@
 // Enum matching is a constant time operation so I'm taking as much advantage of it as possible by integrating the usual branches in the matching sequence to just the enum match by having a huge variety of nodes.
-// Code is not as ergonomic but it is fast. 
+// Code is not as ergonomic but it is fast.
 
-use fxhash::FxHashSet;
+use fnv::FnvHashSet;
+use Node::*;
+use super::compiled_node::*;
+use super::sorted_vec::*;
+use derivative::*;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, Derivative)]
+#[derivative(PartialEq, Hash)]
 pub(crate) enum Node {
     // Main node for matching specific characters
     MatchOne {
-        children: Vec<usize>,
-        character: char,
-    },
-    // When an exclusive character class has only one member eg. [^a]
-    NotMatchOne {
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
         children: Vec<usize>,
         character: char,
     },
     // The children are pointers to indices in the vector of nodes
     Inclusive {
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
         children: Vec<usize>,
-        characters: FxHashSet<char>,
+        characters: Vec<char>,
     },
     Exclusive {
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
         children: Vec<usize>,
-        characters: FxHashSet<char>,
-    },
-    // Usually used for case insensitivity. eg. character: 'a', character2: 'A'. Quicker than using ^
-    MatchTwo {
-        children: Vec<usize>,
-        character: char,
-        character2: char,
-    },
-    NotMatchTwo {
-        children: Vec<usize>,
-        character: char,
-        character2: char,
+        characters: Vec<char>,
     },
     // Unicode Range. The ranges are inclusive
-    InclusiveUnicodeRange {
-        start: u32,
-        end: u32,
+    InclusiveRange {
+        characters: Vec<(char, char)>,
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
         children: Vec<usize>,
     },
-    ExclusiveUnicodeRange {
-        start: u32,
-        end: u32,
+    ExclusiveRange {
+        characters: Vec<(char, char)>,
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        children: Vec<usize>,
+    },
+    // . character - if it matches a newline or not based on the config object
+    MatchAll {
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        children: Vec<usize>,
+    },
+    MatchAllandNL {
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        children: Vec<usize>,
+    },
+    // Anchors
+    BeginningOfLine {
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        children: Vec<usize>,
+    },
+    EndOfLine {
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        children: Vec<usize>,
+    },
+    BeginningOfString {
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        children: Vec<usize>,
+    },
+    EndOfString {
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        children: Vec<usize>,
+    },
+    // \b and \B
+    WordBoundary {
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        children: Vec<usize>,
+    },
+    NotWordBoundary {
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
         children: Vec<usize>,
     },
     // Ending node
     End,
     // Used on negative lookarounds
     Fail,
-    // . character - if it matches a newline or not based on the config object
-    MatchAll {
-        children: Vec<usize>,
-    },
-    MatchAllandNL {
-        children: Vec<usize>,
-    },
-    // Anchors
-    BeginningOfLine {
-        children: Vec<usize>,
-    },
-    EndOfLine {
-        children: Vec<usize>,
-    },
-    BeginningOfString {
-        children: Vec<usize>,
-    },
-    EndOfString {
-        children: Vec<usize>,
-    },
-    // \b and \B
-    WordBoundary {
-        children: Vec<usize>,
-    },
-    NotWordBoundary {
-        children: Vec<usize>,
-    },
     // Epsilon Transition State, Ideally removed by the time it reaches the matching engine.
     Transition {
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
         children: Vec<usize>,
     },
     // For when a exclusive character class has internal character classes as well as other classes/nodes. It has to fail every match to continue.
     ExclusiveNodes {
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
         children: Vec<usize>,
         nodes: Vec<usize>,
     },
     // Capturing Groups
     CapGroup {
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
         children: Vec<usize>,
         number: u32,
     },
     EndCapGroup {
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
         children: Vec<usize>,
         number: u32,
     },
     // For lookarounds
     StartLookAhead {
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
         children: Vec<usize>,
     },
     EndLookAhead {
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
         children: Vec<usize>,
     },
     StartNegativeLookAhead {
         // What to lookahead to
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
         children: Vec<usize>,
     },
     EndNegativeLookAhead {
         // What comes after the lookahead
-        children: Vec<usize>
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
+        children: Vec<usize>,
     },
     StartLookBack {
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
         children: Vec<usize>,
         length: usize,
     },
     // No idea how to implement this efficiently :/
     StartVariableLookBack {
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
         children: Vec<usize>,
+        start: usize,
+        end: usize
     },
-    // Backreferences, likely to be lazily evaluated as I've never seen anyone actually use these. Also probably exclusive to the backtracking engine.
+    // Backreferences, likely to be lazily evaluated because most if a pattern uses it they're not likely to be too concerned about performance. Also probably exclusive to the backtracking engine.
     BackRef {
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
         children: Vec<usize>,
         number: u32,
     },
     // For possessive quantifiers and atomic groups
     DropStack {
+        #[derivative(PartialEq = "ignore", Hash = "ignore")]
         children: Vec<usize>,
     },
     // Recursion
     GlobalRecursion,
-    CapGroupRecursion {
-        children: Vec<usize>,
-        num: u32,
-    },
-    // ((if this matches)Do this|Else Do this)
-    // Path two is a fail. If it gets to the end conditional it succeeds
-    StartConditional {
-        path2: Vec<usize>,
-        children: Vec<usize>,
-    },
-    EndConditional {
-        children: Vec<usize>,
-    },
 }
 
 impl Node {
     #[inline]
     pub fn new_transition() -> Self {
-        return Node::Transition { children: vec![] };
+        return Transition { children: vec![] };
     }
 
     #[inline]
     pub fn new_match_all() -> Self {
-        return Node::MatchAll { children: vec![] };
+        return MatchAll { children: vec![] };
     }
 
     #[inline]
-    pub fn new_from_char(c: char, exclude: bool) -> Self {
-        if exclude {
-            return Node::NotMatchOne {
-                children: vec![],
-                character: c,
-            };
-        } else {
-            return Node::MatchOne {
-                children: vec![],
-                character: c,
-            };
-        }
+    pub fn new_from_char(c: char) -> Self {
+        return MatchOne {
+            children: vec![],
+            character: c,
+        };
     }
 
     #[inline]
-    pub fn new_from_chars(chars: &[char], exclude: bool) -> Self {
+    pub fn new_from_chars(chars: Vec<char>, exclude: bool) -> Self {
         if exclude {
-            return Node::Exclusive {
+            return Exclusive {
                 children: vec![],
-                characters: chars.iter().cloned().collect::<FxHashSet<char>>(),
+                characters: chars,
             };
         } else {
-            return Node::Inclusive {
+            return Inclusive {
                 children: vec![],
-                characters: chars.iter().cloned().collect::<FxHashSet<char>>(),
+                characters: chars,
             };
         }
     }
 
     #[inline]
     pub fn new_end_of_line() -> Self {
-        return Node::EndOfLine { children: Vec::new() };
+        return EndOfLine { children: Vec::new() };
     }
 
     #[inline]
     pub fn new_start_of_line() -> Self {
-        return Node::BeginningOfLine { children: Vec::new() };
+        return BeginningOfLine { children: Vec::new() };
     }
 
     #[inline]
     pub fn get_children_mut(&mut self) -> Option<&mut Vec<usize>> {
         match self {
-            Node::End | Node::Fail | Node::GlobalRecursion => return None,
-            Node::Inclusive { ref mut children, .. }
-            | Node::Exclusive { ref mut children, .. }
-            | Node::Transition { ref mut children, .. }
-            | Node::BeginningOfLine { ref mut children }
-            | Node::EndOfLine { ref mut children }
-            | Node::MatchOne { ref mut children, .. }
-            | Node::MatchAll { ref mut children }
-            | Node::NotMatchOne { ref mut children, .. }
-            | Node::BackRef { ref mut children, .. }
-            | Node::CapGroup { ref mut children, .. }
-            | Node::DropStack { ref mut children }
-            | Node::EndCapGroup { ref mut children, .. }
-            | Node::EndLookAhead { ref mut children, .. }
-            | Node::StartLookAhead { ref mut children, .. }
-            | Node::StartLookBack { ref mut children, .. }
-            | Node::StartVariableLookBack { ref mut children, .. }
-            | Node::WordBoundary { ref mut children }
-            | Node::BackRef { ref mut children, .. }
-            | Node::BeginningOfString { ref mut children }
-            | Node::EndOfString { ref mut children }
-            | Node::InclusiveUnicodeRange { ref mut children, .. }
-            | Node::ExclusiveUnicodeRange { ref mut children, .. }
-            | Node::MatchAllandNL { ref mut children }
-            | Node::ExclusiveNodes { ref mut children, .. }
-            | Node::CapGroupRecursion { ref mut children, .. }
-            | Node::NotWordBoundary { ref mut children, .. }
-            | Node::StartConditional { ref mut children, .. }
-            | Node::EndConditional { ref mut children }
-            | Node::MatchTwo { ref mut children, .. }
-            | Node::NotMatchTwo { ref mut children, .. }
-            | Node::StartNegativeLookAhead {ref mut children, ..}
-            | Node::EndNegativeLookAhead {ref mut children , ..} => {
+            Inclusive { ref mut children, .. }
+            | Exclusive { ref mut children, .. }
+            | Transition { ref mut children, .. }
+            | BeginningOfLine { ref mut children }
+            | EndOfLine { ref mut children }
+            | MatchOne { ref mut children, .. }
+            | MatchAll { ref mut children }
+            | BackRef { ref mut children, .. }
+            | CapGroup { ref mut children, .. }
+            | DropStack { ref mut children }
+            | EndCapGroup { ref mut children, .. }
+            | EndLookAhead { ref mut children, .. }
+            | StartLookAhead { ref mut children, .. }
+            | StartLookBack { ref mut children, .. }
+            | StartVariableLookBack { ref mut children, .. }
+            | WordBoundary { ref mut children }
+            | BackRef { ref mut children, .. }
+            | BeginningOfString { ref mut children }
+            | EndOfString { ref mut children }
+            | InclusiveRange { ref mut children, .. }
+            | ExclusiveRange { ref mut children, .. }
+            | MatchAllandNL { ref mut children }
+            | ExclusiveNodes { ref mut children, .. }
+            | NotWordBoundary { ref mut children, .. }
+            | StartNegativeLookAhead { ref mut children, .. }
+            | EndNegativeLookAhead { ref mut children, .. } => {
                 return Some(children);
             }
+            _ => return None,
         };
+    }
+
+    #[inline]
+    pub fn get_children(&self) -> Option<&Vec<usize>> {
+        match self {
+            Inclusive { children, .. }
+            | Exclusive { children, .. }
+            | Transition { children, .. }
+            | BeginningOfLine { children }
+            | EndOfLine { children }
+            | MatchOne { children, .. }
+            | MatchAll { children }
+            | BackRef { children, .. }
+            | CapGroup { children, .. }
+            | DropStack { children }
+            | EndCapGroup { children, .. }
+            | EndLookAhead { children, .. }
+            | StartLookAhead { children, .. }
+            | StartLookBack { children, .. }
+            | StartVariableLookBack { children, .. }
+            | WordBoundary { children }
+            | BackRef { children, .. }
+            | BeginningOfString { children }
+            | EndOfString { children }
+            | InclusiveRange { children, .. }
+            | ExclusiveRange { children, .. }
+            | MatchAllandNL { children }
+            | ExclusiveNodes { children, .. }
+            | NotWordBoundary { children, .. }
+            | StartNegativeLookAhead { children, .. }
+            | EndNegativeLookAhead { children, .. } => {
+                return Some(children);
+            }
+            _ => return None,
+        }
     }
 
     #[inline]
@@ -249,28 +272,18 @@ impl Node {
     }
 
     #[inline]
-    pub fn lazy_dependent_insert(&mut self, to_add: usize, lazy: bool) {
-        let children = self.get_children_mut().unwrap();
-        if lazy {
-            children.push(to_add);
-        } else {
-            children.insert(0, to_add);
-        }
-    }
-
-    #[inline]
     pub fn get_transition_children_mut(&mut self) -> &mut Vec<usize> {
         match self {
-            Node::Transition { ref mut children, .. }
-            | Node::CapGroup { ref mut children, .. }
-            | Node::EndCapGroup { ref mut children, .. }
-            | Node::StartLookAhead { ref mut children, .. }
-            | Node::EndLookAhead { ref mut children, .. }
-            | Node::StartLookBack { ref mut children, .. }
-            | Node::StartVariableLookBack { ref mut children, .. }
-            | Node::BackRef { ref mut children, .. }
-            | Node::DropStack { ref mut children, .. }
-            | Node::EndNegativeLookAhead {ref mut children, ..} => {
+            Transition { ref mut children, .. }
+            | CapGroup { ref mut children, .. }
+            | EndCapGroup { ref mut children, .. }
+            | StartLookAhead { ref mut children, .. }
+            | EndLookAhead { ref mut children, .. }
+            | StartLookBack { ref mut children, .. }
+            | StartVariableLookBack { ref mut children, .. }
+            | BackRef { ref mut children, .. }
+            | DropStack { ref mut children, .. }
+            | EndNegativeLookAhead { ref mut children, .. } => {
                 return children;
             }
             _ => panic!(format!("{:?}", self)),
@@ -289,13 +302,150 @@ impl Node {
         children.insert(0, to_add);
     }
 
-    #[inline]
-    pub fn transition_lazy_dependent(&mut self, to_add: usize, lazy: bool) {
-        let children = self.get_transition_children_mut();
-        if lazy {
-            children.push(to_add);
-        } else {
-            children.insert(0, to_add);
+    pub fn to_cnode(self, old_to_new: &fnv::FnvHashMap<usize,usize>) -> CompiledNode {
+        let children: Children = match self.get_children() {
+            Some(c) => {
+                if c.len() == 1 {
+                    Children::Single(*old_to_new.get(c.get(0).expect("No items in children")).expect(&format!("{} not in old_to_new", c.get(0).unwrap())))
+                } else {
+                    let mut vec = c.iter()
+                    .map(|v| {
+                        return *old_to_new.get(v).unwrap();
+                    })
+                    .collect();
+                    // super::utils::remove_duplicates_without_sort(&mut vec);
+                    Children::Multiple(
+                        vec
+                    )
+                }
+            }
+            None => Children::None,
+        };
+
+        use crate::utf_8::CharLen;
+
+        let node: CNode = match self {
+            MatchOne { character, .. } => CNode::Match(MatchNode::One(One::MatchOne(character))),
+            Inclusive { characters, .. } => {
+                if characters.len() == 1 {
+                    CNode::Match(MatchNode::One(One::MatchOne(characters[0])))
+                } else {
+                    CNode::Match(MatchNode::Range(Range::Inclusive(SortedVec::from(characters))))
+                }
+            }
+            Exclusive { characters, .. } => {
+                if characters.len() == 1 {
+                    CNode::Match(MatchNode::One(One::NotMatchOne(characters[0])))
+                } else {
+                    CNode::Match(MatchNode::Range(Range::Exclusive(SortedVec::from(characters))))
+                }
+            }
+            InclusiveRange { characters, .. } => CNode::Match(MatchNode::Range(Range::InclusiveRange(characters))),
+            ExclusiveRange { characters, .. } => CNode::Match(MatchNode::Range(Range::ExclusiveRange(characters))),
+            MatchAll { .. } => CNode::Match(MatchNode::One(One::NotMatchOne('\n'))),
+            MatchAllandNL { .. } => CNode::Match(MatchNode::One(One::MatchAll)),
+            BeginningOfLine { .. } => CNode::Anchor(AnchorNode::BeginningOfLine),
+            EndOfLine { .. } => CNode::Anchor(AnchorNode::EndOfLine),
+            BeginningOfString { .. } => CNode::Anchor(AnchorNode::StartOfString),
+            EndOfString { .. } => CNode::Anchor(AnchorNode::EndOfString),
+            WordBoundary {..} => CNode::Anchor(AnchorNode::WordBoundary),
+            NotWordBoundary {..} => CNode::Anchor(AnchorNode::NotWordBoundary),
+            End => CNode::Special(SpecialNode::End),
+            Fail => CNode::Special(SpecialNode::Fail),
+            Transition {..} => CNode::Behaviour(BehaviourNode::Transition),
+            ExclusiveNodes {..} => unimplemented!(),
+            CapGroup {number, ..} => CNode::Behaviour(BehaviourNode::CapGroup(number)),
+            StartLookAhead {..} => CNode::Special(SpecialNode::StartLookAhead),
+            EndLookAhead {..} => CNode::Special(SpecialNode::EndLookAhead),
+            StartNegativeLookAhead {..} => CNode::Special(SpecialNode::StartNegativeLookAhead),
+            EndNegativeLookAhead {..} => CNode::Special(SpecialNode::EndNegativeLookAhead),
+            StartLookBack {length, ..} => CNode::Special(SpecialNode::StartLookBack(length)),
+            StartVariableLookBack {start, end, ..} => CNode::Special(SpecialNode::StartVariableLookback(start, end)),
+            BackRef {number, ..} => CNode::Special(SpecialNode::BackRef(number)),
+            DropStack {..} => CNode::Behaviour(BehaviourNode::DropStack),
+            EndCapGroup {number, ..} => CNode::Behaviour(BehaviourNode::EndCapGroup(number)),
+            GlobalRecursion {..} => CNode::Special(SpecialNode::GlobalRecursion),
+        };
+
+        return CompiledNode {
+            children, node
         }
     }
+
+    // pub fn optimize(&mut self) {
+    //     if let Some(c) = self.get_children_mut() {
+    //         if c.len() == 1 {
+    //             match self {
+    //                 MatchOne { children, character } => {
+    //                     *self = MatchOneX {
+    //                         character: *character,
+    //                         child: children[0],
+    //                     }
+    //                 }
+    //                 NotMatchOne { children, character } => {
+    //                     *self = NotMatchOneX {
+    //                         character: *character,
+    //                         child: children[0],
+    //                     }
+    //                 }
+    //                 Inclusive { children, characters } => {
+    //                     *self = InclusiveX {
+    //                         child: children[0],
+    //                         characters: characters.clone(),
+    //                     }
+    //                 }
+    //                 Exclusive { children, characters } => {
+    //                     *self = ExclusiveX {
+    //                         child: children[0],
+    //                         characters: characters.clone(),
+    //                     }
+    //                 }
+    //                 MatchTwo {
+    //                     children,
+    //                     character,
+    //                     character2,
+    //                 } => {
+    //                     *self = MatchTwoX {
+    //                         child: children[0],
+    //                         character: *character,
+    //                         character2: *character2,
+    //                     }
+    //                 }
+    //                 NotMatchTwo {
+    //                     children,
+    //                     character,
+    //                     character2,
+    //                 } => {
+    //                     *self = NotMatchTwoX {
+    //                         child: children[0],
+    //                         character: *character,
+    //                         character2: *character2,
+    //                     }
+    //                 }
+    //                 InclusiveRange { children, start, end } => {
+    //                     *self = InclusiveRangeX {
+    //                         child: children[0],
+    //                         start: *start,
+    //                         end: *end,
+    //                     }
+    //                 }
+    //                 ExclusiveRange { children, start, end } => {
+    //                     *self = ExclusiveRangeX {
+    //                         child: children[0],
+    //                         start: *start,
+    //                         end: *end,
+    //                     }
+    //                 }
+    //                 MatchAll { children } => *self = MatchAllX { child: children[0] },
+    //                 MatchAllandNL { children } => *self = MatchAllandNLX { child: children[0] },
+    //                 BeginningOfLine { children } => *self = BeginningOfLineX { child: children[0] },
+    //                 EndOfLine { children } => *self = EndOfLineX { child: children[0] },
+    //                 BeginningOfString { children } => *self = BeginningOfStringX { child: children[0] },
+    //                 WordBoundary { children } => *self = WordBoundaryX { child: children[0] },
+    //                 NotWordBoundary { children } => *self = NotWordBoundaryX { child: children[0] },
+    //                 _ => (),
+    //             }
+    //         }
+    //     }
+    // }
 }

@@ -1,5 +1,3 @@
-use std::sync::atomic;
-
 #[derive(Copy, Clone, Debug)]
 pub struct RegexConfig {
     dotall: bool,
@@ -12,7 +10,8 @@ impl Default for RegexConfig {
         return RegexConfig {
             dotall: false,
             enforce_linear_time_match: false,
-            multithreading: true
+            // Offload utf8 decoding and potentially matching to multiple threads
+            multithreading: true,
         };
     }
 }

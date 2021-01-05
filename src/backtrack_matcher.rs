@@ -1,9 +1,14 @@
-use super::nfa::*;
+use super::nfa::{Node::*, *};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use super::constants::W;
 
 struct Capture {
     string: Vec<char>,
     children: Vec<Capture>,
 }
+
+pub type CapturesMap = fxhash::FxHashMap::<u32, Vec<(usize, usize)>>;
 
 #[inline]
 fn iter_child(callstack: &mut Vec<(usize, usize, usize, bool)>, children: &[usize], child: usize, str_index: usize) {
@@ -31,7 +36,7 @@ pub(crate) fn pure_match(node_vec: &[Node], chars: &[char], start_index: usize, 
             None => {
                 callstack.clear();
                 return false;
-            },
+            }
             Some(x) => {
                 // println!("New Node");
                 let (node_index, mut child, mut string_index, just_inserted) = x.clone();
@@ -57,22 +62,6 @@ pub(crate) fn pure_match(node_vec: &[Node], chars: &[char], start_index: usize, 
                                 None => {
                                     callstack.pop();
                                 }
-                            }
-                        } else {
-                            iter_child(&mut callstack, children, child, string_index + 1);
-                        }
-                    }
-                    Node::NotMatchOne { ref character, ref children } => {
-                        if just_inserted {
-                            let c = chars.get(string_index);
-                            if let Some(c) = c {
-                                if c != character {
-                                    iter_child(&mut callstack, children, child, string_index + 1);
-                                } else {
-                                    callstack.pop();
-                                }
-                            } else {
-                                callstack.pop();
                             }
                         } else {
                             iter_child(&mut callstack, children, child, string_index + 1);
@@ -164,7 +153,7 @@ pub(crate) fn pure_match(node_vec: &[Node], chars: &[char], start_index: usize, 
                         println!("Recursive Node");
                         callstack.pop();
                         recurstion_stack.push(node_index - 1);
-                        callstack.push((0,0,string_index,true));
+                        callstack.push((0, 0, string_index, true));
                     }
                     Node::End => {
                         println!("End Node");
@@ -173,7 +162,7 @@ pub(crate) fn pure_match(node_vec: &[Node], chars: &[char], start_index: usize, 
                             match recurstion_stack.pop() {
                                 Some(x) => {
                                     completed_recurstion_stack.push(x);
-                                    callstack.push((x,0,string_index,false));
+                                    callstack.push((x, 0, string_index, false));
                                 }
                                 None => {
                                     callstack.clear();
@@ -187,23 +176,21 @@ pub(crate) fn pure_match(node_vec: &[Node], chars: &[char], start_index: usize, 
                                     recurstion_stack.push(x);
                                     callstack.pop();
                                 }
-                                None => panic!()
+                                None => panic!(),
                             }
                         }
                     }
-                    Node::StartLookAhead {ref children} => {
+                    Node::StartLookAhead { ref children } => {
                         if just_inserted {
                             lookahead_stack.push(string_index);
                         }
                         iter_child(callstack, children, child, string_index);
                     }
-                    Node::EndLookAhead {ref children} => {
+                    Node::EndLookAhead { ref children } => {
                         let idx = lookahead_stack.pop().unwrap();
                         iter_child(callstack, children, child, idx);
                     }
-                    Node::StartNegativeLookAhead {
-                        ref children
-                    } => {
+                    Node::StartNegativeLookAhead { ref children } => {
                         if just_inserted {
                             iter_child(callstack, children, child, string_index);
                         } else {
@@ -216,7 +203,7 @@ pub(crate) fn pure_match(node_vec: &[Node], chars: &[char], start_index: usize, 
                                 }
                                 None => {
                                     callstack.pop();
-                                    callstack.push((node_index + 1,0,string_index,false));
+                                    callstack.push((node_index + 1, 0, string_index, false));
                                 }
                             }
                         }
@@ -226,14 +213,14 @@ pub(crate) fn pure_match(node_vec: &[Node], chars: &[char], start_index: usize, 
                             loop {
                                 match callstack.pop() {
                                     Some(x) => {
-                                        let (before_index,_,_,_) = x;
+                                        let (before_index, _, _, _) = x;
                                         if before_index == node_index - 1 {
                                             break;
                                         }
-                                    },
+                                    }
                                     None => {
                                         callstack.clear();
-                                        return false
+                                        return false;
                                     }
                                 }
                             }
@@ -241,46 +228,697 @@ pub(crate) fn pure_match(node_vec: &[Node], chars: &[char], start_index: usize, 
                             iter_child(callstack, children, child, string_index);
                         }
                     }
-                    Node::ExclusiveUnicodeRange {ref start, ref end, ref children} => {
-                        if just_inserted {
-                            match chars.get(string_index) {
-                                Some(c) => {
-                                    let c = *c as u32;
-                                    if c <= *start || c >= *end {
-                                        iter_child(callstack, children , child, string_index);
-                                    } else {
-                                        callstack.pop();
-                                    }
-                                }
-                                None => {
-                                    callstack.pop();
-                                }
-                            }
-                        } else {
-                            iter_child(callstack, children, child, string_index);
-                        }
-                    }
-                    Node::InclusiveUnicodeRange {ref start, ref end, ref children} => {
-                        if just_inserted {
-                            match chars.get(string_index) {
-                                Some(c) => {
-                                    let c = *c as u32;
-                                    if c >= *start && c <= *end {
-                                        iter_child(callstack, children , child, string_index);
-                                    } else {
-                                        callstack.pop();
-                                    }
-                                }
-                                None => {
-                                    callstack.pop();
-                                }
-                            }
-                        } else {
-                            iter_child(callstack, children, child, string_index);
-                        }
-                    }
+                    // Node::ExclusiveRange {
+                    //     ref characters
+                    //     ref children,
+                    // } => {
+                    //     if just_inserted {
+                    //         match chars.get(string_index) {
+                    //             Some(c) => {
+                    //                 if c <= start || c >= end {
+                    //                     iter_child(callstack, children, child, string_index);
+                    //                 } else {
+                    //                     callstack.pop();
+                    //                 }
+                    //             }
+                    //             None => {
+                    //                 callstack.pop();
+                    //             }
+                    //         }
+                    //     } else {
+                    //         iter_child(callstack, children, child, string_index);
+                    //     }
+                    // }
+                    // Node::InclusiveRange {
+                    //     ref start,
+                    //     ref end,
+                    //     ref children,
+                    // } => {
+                    //     if just_inserted {
+                    //         match chars.get(string_index) {
+                    //             Some(c) => {
+                    //                 if c >= start && c <= end {
+                    //                     iter_child(callstack, children, child, string_index);
+                    //                 } else {
+                    //                     callstack.pop();
+                    //                 }
+                    //             }
+                    //             None => {
+                    //                 callstack.pop();
+                    //             }
+                    //         }
+                    //     } else {
+                    //         iter_child(callstack, children, child, string_index);
+                    //     }
+                    // }
                     _ => unimplemented!(),
                 };
+            }
+        }
+    }
+}
+
+use super::compiled_node::{CompiledNode, CNode::*, *};
+use super::utf_8::next_utf8;
+
+pub(crate) fn c_pure_match(nodes: &[CompiledNode], string: &[char], mut callstack: &mut Vec<(usize, usize, usize, bool)>, start_index: usize, start_node: usize) -> Option<usize> {
+    let mut recurstion_stack: Vec<usize> = Vec::new();
+    let mut completed_recurstion_stack: Vec<usize> = Vec::new();
+    let mut lookahead_stack: Vec<usize> = Vec::new();
+    let mut completed_lookahead_stack = Vec::<usize>::new();
+    callstack.push((start_node, 0usize, start_index, true));
+    // let mut current_captures = fxhash::FxHashMap::<u32, Vec<usize>>::default();
+    // let mut completed_captures = CapturesMap::default();
+    loop {
+        match callstack.last() {
+            None => {
+                callstack.clear();
+                return None;
+            }
+            Some(x) => {
+                let (node_index, child, string_index, just_inserted) = *x;
+                let node = unsafe {nodes.get_unchecked(node_index)};
+                match &node.node {
+                    Match(match_node) => {
+                        if just_inserted {
+                            let current_char = match string.get(string_index) {
+                                Some(c) => c,
+                                None => {
+                                    callstack.pop();
+                                    continue
+                                },
+                            };
+                            use MatchNode::*;
+                            match match_node {
+                                One(match_node) => {
+                                    use self::One::*;
+                                    match match_node {
+                                        MatchOne(c) => {
+                                            if c != current_char {
+                                                callstack.pop();
+                                                continue
+                                            }
+                                        }
+                                        NotMatchOne(c) => {
+                                            if c == current_char {
+                                                callstack.pop();
+                                                continue
+                                            }
+                                        }
+                                        MatchAll => (),
+                                    }
+                                },
+                                Range(match_node) => {
+                                    use self::Range::*;
+                                    match match_node {
+                                        InclusiveRange(characters) => {
+                                            if !(characters.find(current_char)) {
+                                                callstack.pop();
+                                                continue
+                                            }
+                                        }
+                                        Inclusive(chars) => {
+                                            if !chars.contains(current_char) {
+                                                callstack.pop();
+                                                continue
+                                            }
+                                        }
+                                        Exclusive(chars) => {
+                                            if chars.contains(current_char) {
+                                                callstack.pop();
+                                                continue;
+                                            }
+                                        }
+                                        ExclusiveRange(characters) => {
+                                            if characters.find(current_char) {
+                                                callstack.pop();
+                                                continue
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        match &node.children {
+                            Children::Multiple(children) => {
+                                let (_,c,_,b) = callstack.last_mut().unwrap();
+                                *b = false;
+                                match children.get(*c) {
+                                    None => {
+                                        callstack.pop();
+                                    },
+                                    Some(n) => {
+                                        *c += 1;
+                                        callstack.push((*n, 0, string_index + 1, true));
+                                    }
+                                }
+                            }
+                            Children::Single(child) => {
+                                callstack.pop();
+                                callstack.push((*child, 0, string_index + 1, true));
+                            }
+                            Children::None => panic!("Found no children on match node")
+                        }
+                    }
+                    Anchor(anchor_node) => {
+                        if just_inserted {
+                            use AnchorNode::*;
+                            match anchor_node {
+                                BeginningOfLine => {
+                                    if !(string_index == 0 || unsafe {string.get_unchecked(string_index - 1)} == &'\n') {
+                                        callstack.pop();
+                                        continue
+                                    }
+                                }
+                                EndOfLine => {
+                                    if !(string_index == string.len() || unsafe {string.get_unchecked(string_index + 1)} == &'\n') {
+                                        callstack.pop();
+                                        continue
+                                    }
+                                }
+                                // Messy but it works
+                                WordBoundary => {
+                                     if !((string_index == 0 && match string.get(string_index).map(|c| W.binary_search(c).is_ok()) {Some(b) => b, None => false}) 
+                                     || (string_index == string.len() && match string.get(string_index - 1).map(|c| W.binary_search(c).is_ok()) {Some(b) => b, None => false}) 
+                                     || (match string.get(string_index - 1).map(|c| W.binary_search(c).is_ok()) {Some(b) => b, None => false} && !(match string.get(string_index).map(|c| W.binary_search(c).is_ok()) {Some(b) => b, None => false})) 
+                                     || (match string.get(string_index).map(|c| W.binary_search(c).is_ok()) {Some(b) => b, None => false} && !(match string.get(string_index - 1).map(|c| W.binary_search(c).is_ok()) {Some(b) => b, None => false}))) {
+                                        callstack.pop();
+                                        continue
+                                     }
+                                }
+                                NotWordBoundary => {
+                                    if (string_index == 0 && match string.get(string_index).map(|c| W.binary_search(c).is_ok()) {Some(b) => b, None => false}) 
+                                     || (string_index == string.len() && match string.get(string_index - 1).map(|c| W.binary_search(c).is_ok()) {Some(b) => b, None => false}) 
+                                     || (match string.get(string_index - 1).map(|c| W.binary_search(c).is_ok()) {Some(b) => b, None => false} && !(match string.get(string_index).map(|c| W.binary_search(c).is_ok()) {Some(b) => b, None => false})) 
+                                     || (match string.get(string_index).map(|c| W.binary_search(c).is_ok()) {Some(b) => b, None => false} && !(match string.get(string_index - 1).map(|c| W.binary_search(c).is_ok()) {Some(b) => b, None => false})) {
+                                        callstack.pop();
+                                        continue
+                                     }
+                                }
+                                StartOfString => {
+                                    if string_index != 0 {
+                                        callstack.pop();
+                                        continue
+                                    }
+                                }
+                                EndOfString => {
+                                    if string_index != string.len() {
+                                        callstack.pop();
+                                        continue
+                                    }
+                                }
+                            }
+                        }
+                        match &node.children {
+                            Children::Multiple(children) => {
+                                let (_,c,_,b) = callstack.last_mut().unwrap();
+                                *b = false;
+                                match children.get(*c) {
+                                    None => {
+                                        callstack.pop();
+                                    },
+                                    Some(n) => {
+                                        *c += 1;
+                                        callstack.push((*n, 0, string_index, true));
+                                    }
+                                }
+                            }
+                            Children::Single(child) => {
+                                callstack.pop();
+                                callstack.push((*child, 0, string_index, true));
+                            }
+                            Children::None => panic!("Found no children on match node")
+                        }
+                    }
+                    Behaviour(behaviour_node) => {
+                        use BehaviourNode::*;
+                        if just_inserted {
+                            match behaviour_node {
+                                Transition => (),
+                                CapGroup(num) => {
+                                    // match current_captures.get_mut(num) {
+                                    //     None => {current_captures.insert(*num, vec![string_index]);},
+                                    //     Some(vec) => vec.push(string_index),
+                                    // };
+                                }
+                                EndCapGroup(num) => {
+                                    // let start = current_captures.get_mut(num).unwrap().pop().unwrap();
+                                    // match completed_captures.get_mut(num) {
+                                    //     None => {completed_captures.insert(*num, vec![(start, string_index)]);},
+                                    //     Some(vec) => vec.push((start, string_index)),
+                                    // };
+                                }
+                                DropStack => {
+                                    callstack.clear();
+                                    callstack.push((node_index, child, string_index, just_inserted));
+                                }
+                            }
+                        }
+                        match &node.children {
+                            Children::Multiple(children) => {
+                                let (_,c,_,b) = callstack.last_mut().unwrap();
+                                *b = false;
+                                match children.get(*c) {
+                                    None => {
+                                        callstack.pop();
+                                    },
+                                    Some(n) => {
+                                        *c += 1;
+                                        callstack.push((*n, 0, string_index, true));
+                                    }
+                                }
+                            }
+                            Children::Single(child) => {
+                                callstack.pop();
+                                callstack.push((*child, 0, string_index, true));
+                            }
+                            Children::None => panic!("Found no children on transition node")
+                        }
+                    }
+                    Special(special_node) => {
+                        use SpecialNode::*;
+                        let consider_children;
+                        callstack.last_mut().unwrap().3 = false;
+                        match special_node {
+                            End => {
+                                consider_children = false;
+                                if just_inserted {
+                                    match recurstion_stack.pop() {
+                                        Some(x) => {
+                                            completed_recurstion_stack.push(x);
+                                            callstack.push((x, 0, string_index, false));
+                                        }
+                                        None => {
+                                            callstack.clear();
+                                            // completed_captures.insert(0, vec![(start_index, string_index)]);
+                                            // return Some(completed_captures);
+                                            return Some(string_index);
+                                        }
+                                    }
+                                } else {
+                                    callstack.pop();
+                                    match completed_recurstion_stack.pop() {
+                                        Some(x) => {
+                                            recurstion_stack.push(x);
+                                            callstack.pop();
+                                        }
+                                        None => panic!("Not just inserted"),
+                                    }
+                                }
+                            }
+                            Fail => {
+                                callstack.pop();
+                                continue;
+                            }
+                            GlobalRecursion => {
+                                consider_children = false;
+                                callstack.pop();
+                            }
+                            Subroutine => unimplemented!("Subroutine not implemented"),
+                            StartLookAhead => {
+                                consider_children = true;
+                                if just_inserted {
+                                    lookahead_stack.push(string_index);
+                                }
+                            }
+                            EndLookAhead => {
+                                consider_children = false;
+                                if just_inserted {
+                                    completed_lookahead_stack.push(lookahead_stack.pop().unwrap());
+                                }
+                                match &node.children {
+                                    Children::Multiple(children) => {
+                                        let (_,c,_,b) = callstack.last_mut().unwrap();
+                                        *b = false;
+                                        match children.get(*c) {
+                                            None => {
+                                                lookahead_stack.push(completed_lookahead_stack.pop().unwrap());
+                                                callstack.pop();
+                                            },
+                                            Some(n) => {
+                                                *c += 1;
+                                                callstack.push((*n, 0, *completed_lookahead_stack.last().unwrap(), true));
+                                            }
+                                        }
+                                    }
+                                    Children::Single(child) => {
+                                        if just_inserted {
+                                            callstack.push((*child, 0,  *completed_lookahead_stack.last().unwrap(), true));
+                                        } else {
+                                            lookahead_stack.push(completed_lookahead_stack.pop().unwrap());
+                                            callstack.pop();
+                                        }
+                                    }
+                                    Children::None => panic!("Found no children on special node")
+                                }
+                            }
+                            _ => unimplemented!(),
+                        }
+                        if consider_children {
+                            match &node.children {
+                                Children::Multiple(children) => {
+                                    let (_,c,_,b) = callstack.last_mut().unwrap();
+                                    *b = false;
+                                    match children.get(*c) {
+                                        None => {
+                                            callstack.pop();
+                                        },
+                                        Some(n) => {
+                                            *c += 1;
+                                            callstack.push((*n, 0, string_index, true));
+                                        }
+                                    }
+                                }
+                                Children::Single(child) => {
+                                    callstack.pop();
+                                    callstack.push((*child, 0, string_index, true));
+                                }
+                                Children::None => panic!("Found no children on special node")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+pub(crate) fn c_captures_match(nodes: &[CompiledNode], string: &[char], mut callstack: &mut Vec<(usize, usize, usize, bool)>, start_index: usize, start_node: usize) -> Option<CapturesMap> {
+    let mut recurstion_stack: Vec<usize> = Vec::new();
+    let mut completed_recurstion_stack: Vec<usize> = Vec::new();
+    let mut lookahead_stack: Vec<usize> = Vec::new();
+    let mut completed_lookahead_stack = Vec::<usize>::new();
+    callstack.push((start_node, 0usize, start_index, true));
+    let mut current_captures = fxhash::FxHashMap::<u32, Vec<usize>>::default();
+    let mut completed_captures = CapturesMap::default();
+    loop {
+        match callstack.last() {
+            None => {
+                callstack.clear();
+                return None;
+            }
+            Some(x) => {
+                let (node_index, child, string_index, just_inserted) = *x;
+                let node = unsafe {nodes.get_unchecked(node_index)};
+                match &node.node {
+                    Match(match_node) => {
+                        if just_inserted {
+                            let current_char = match string.get(string_index) {
+                                Some(c) => c,
+                                None => {
+                                    callstack.pop();
+                                    continue
+                                },
+                            };
+                            use MatchNode::*;
+                            match match_node {
+                                One(match_node) => {
+                                    use self::One::*;
+                                    match match_node {
+                                        MatchOne(c) => {
+                                            if c != current_char {
+                                                callstack.pop();
+                                                continue
+                                            }
+                                        }
+                                        NotMatchOne(c) => {
+                                            if c == current_char {
+                                                callstack.pop();
+                                                continue
+                                            }
+                                        }
+                                        MatchAll => (),
+                                    }
+                                },
+                                Range(match_node) => {
+                                    use self::Range::*;
+                                    match match_node {
+                                        InclusiveRange(characters) => {
+                                            if !(characters.find(current_char)) {
+                                                callstack.pop();
+                                                continue
+                                            }
+                                        }
+                                        Inclusive(chars) => {
+                                            if !chars.contains(current_char) {
+                                                callstack.pop();
+                                                continue
+                                            }
+                                        }
+                                        Exclusive(chars) => {
+                                            if chars.contains(current_char) {
+                                                callstack.pop();
+                                                continue;
+                                            }
+                                        }
+                                        ExclusiveRange(characters) => {
+                                            if characters.find(current_char) {
+                                                callstack.pop();
+                                                continue
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        match &node.children {
+                            Children::Multiple(children) => {
+                                let (_,c,_,b) = callstack.last_mut().unwrap();
+                                *b = false;
+                                match children.get(*c) {
+                                    None => {
+                                        callstack.pop();
+                                    },
+                                    Some(n) => {
+                                        *c += 1;
+                                        callstack.push((*n, 0, string_index + 1, true));
+                                    }
+                                }
+                            }
+                            Children::Single(child) => {
+                                callstack.pop();
+                                callstack.push((*child, 0, string_index + 1, true));
+                            }
+                            Children::None => panic!("Found no children on match node")
+                        }
+                    }
+                    Anchor(anchor_node) => {
+                        if just_inserted {
+                            use AnchorNode::*;
+                            match anchor_node {
+                                BeginningOfLine => {
+                                    if !(string_index == 0 || unsafe {string.get_unchecked(string_index - 1)} == &'\n') {
+                                        callstack.pop();
+                                        continue
+                                    }
+                                }
+                                EndOfLine => {
+                                    if !(string_index == string.len() || unsafe {string.get_unchecked(string_index + 1)} == &'\n') {
+                                        callstack.pop();
+                                        continue
+                                    }
+                                }
+                                // Messy but it works
+                                WordBoundary => {
+                                     if !((string_index == 0 && match string.get(string_index).map(|c| W.binary_search(c).is_ok()) {Some(b) => b, None => false}) 
+                                     || (string_index == string.len() && match string.get(string_index - 1).map(|c| W.binary_search(c).is_ok()) {Some(b) => b, None => false}) 
+                                     || (match string.get(string_index - 1).map(|c| W.binary_search(c).is_ok()) {Some(b) => b, None => false} && !(match string.get(string_index).map(|c| W.binary_search(c).is_ok()) {Some(b) => b, None => false})) 
+                                     || (match string.get(string_index).map(|c| W.binary_search(c).is_ok()) {Some(b) => b, None => false} && !(match string.get(string_index - 1).map(|c| W.binary_search(c).is_ok()) {Some(b) => b, None => false}))) {
+                                        callstack.pop();
+                                        continue
+                                     }
+                                }
+                                NotWordBoundary => {
+                                    if (string_index == 0 && match string.get(string_index).map(|c| W.binary_search(c).is_ok()) {Some(b) => b, None => false}) 
+                                     || (string_index == string.len() && match string.get(string_index - 1).map(|c| W.binary_search(c).is_ok()) {Some(b) => b, None => false}) 
+                                     || (match string.get(string_index - 1).map(|c| W.binary_search(c).is_ok()) {Some(b) => b, None => false} && !(match string.get(string_index).map(|c| W.binary_search(c).is_ok()) {Some(b) => b, None => false})) 
+                                     || (match string.get(string_index).map(|c| W.binary_search(c).is_ok()) {Some(b) => b, None => false} && !(match string.get(string_index - 1).map(|c| W.binary_search(c).is_ok()) {Some(b) => b, None => false})) {
+                                        callstack.pop();
+                                        continue
+                                     }
+                                }
+                                StartOfString => {
+                                    if string_index != 0 {
+                                        callstack.pop();
+                                        continue
+                                    }
+                                }
+                                EndOfString => {
+                                    if string_index != string.len() {
+                                        callstack.pop();
+                                        continue
+                                    }
+                                }
+                            }
+                        }
+                        match &node.children {
+                            Children::Multiple(children) => {
+                                let (_,c,_,b) = callstack.last_mut().unwrap();
+                                *b = false;
+                                match children.get(*c) {
+                                    None => {
+                                        callstack.pop();
+                                    },
+                                    Some(n) => {
+                                        *c += 1;
+                                        callstack.push((*n, 0, string_index, true));
+                                    }
+                                }
+                            }
+                            Children::Single(child) => {
+                                callstack.pop();
+                                callstack.push((*child, 0, string_index, true));
+                            }
+                            Children::None => panic!("Found no children on match node")
+                        }
+                    }
+                    Behaviour(behaviour_node) => {
+                        use BehaviourNode::*;
+                        if just_inserted {
+                            match behaviour_node {
+                                Transition => (),
+                                CapGroup(num) => {
+                                    match current_captures.get_mut(num) {
+                                        None => {current_captures.insert(*num, vec![string_index]);},
+                                        Some(vec) => vec.push(string_index),
+                                    };
+                                }
+                                EndCapGroup(num) => {
+                                    let start = current_captures.get_mut(num).unwrap().pop().unwrap();
+                                    match completed_captures.get_mut(num) {
+                                        None => {completed_captures.insert(*num, vec![(start, string_index)]);},
+                                        Some(vec) => vec.push((start, string_index)),
+                                    };
+                                }
+                                DropStack => {
+                                    callstack.clear();
+                                    callstack.push((node_index, child, string_index, just_inserted));
+                                }
+                            }
+                        }
+                        match &node.children {
+                            Children::Multiple(children) => {
+                                let (_,c,_,b) = callstack.last_mut().unwrap();
+                                *b = false;
+                                match children.get(*c) {
+                                    None => {
+                                        callstack.pop();
+                                    },
+                                    Some(n) => {
+                                        *c += 1;
+                                        callstack.push((*n, 0, string_index, true));
+                                    }
+                                }
+                            }
+                            Children::Single(child) => {
+                                callstack.pop();
+                                callstack.push((*child, 0, string_index, true));
+                            }
+                            Children::None => panic!("Found no children on transition node")
+                        }
+                    }
+                    Special(special_node) => {
+                        use SpecialNode::*;
+                        let consider_children;
+                        callstack.last_mut().unwrap().3 = false;
+                        match special_node {
+                            End => {
+                                consider_children = false;
+                                if just_inserted {
+                                    match recurstion_stack.pop() {
+                                        Some(x) => {
+                                            completed_recurstion_stack.push(x);
+                                            callstack.push((x, 0, string_index, false));
+                                        }
+                                        None => {
+                                            callstack.clear();
+                                            completed_captures.insert(0, vec![(start_index, string_index)]);
+                                            return Some(completed_captures);
+                                        }
+                                    }
+                                } else {
+                                    callstack.pop();
+                                    match completed_recurstion_stack.pop() {
+                                        Some(x) => {
+                                            recurstion_stack.push(x);
+                                            callstack.pop();
+                                        }
+                                        None => panic!("Not just inserted"),
+                                    }
+                                }
+                            }
+                            Fail => {
+                                callstack.pop();
+                                continue;
+                            }
+                            GlobalRecursion => {
+                                consider_children = false;
+                                callstack.pop();
+                            }
+                            Subroutine => unimplemented!("Subroutine not implemented"),
+                            StartLookAhead => {
+                                consider_children = true;
+                                if just_inserted {
+                                    lookahead_stack.push(string_index);
+                                }
+                            }
+                            EndLookAhead => {
+                                consider_children = false;
+                                if just_inserted {
+                                    completed_lookahead_stack.push(lookahead_stack.pop().unwrap());
+                                }
+                                match &node.children {
+                                    Children::Multiple(children) => {
+                                        let (_,c,_,b) = callstack.last_mut().unwrap();
+                                        *b = false;
+                                        match children.get(*c) {
+                                            None => {
+                                                lookahead_stack.push(completed_lookahead_stack.pop().unwrap());
+                                                callstack.pop();
+                                            },
+                                            Some(n) => {
+                                                *c += 1;
+                                                callstack.push((*n, 0, *completed_lookahead_stack.last().unwrap(), true));
+                                            }
+                                        }
+                                    }
+                                    Children::Single(child) => {
+                                        if just_inserted {
+                                            callstack.push((*child, 0,  *completed_lookahead_stack.last().unwrap(), true));
+                                        } else {
+                                            lookahead_stack.push(completed_lookahead_stack.pop().unwrap());
+                                            callstack.pop();
+                                        }
+                                    }
+                                    Children::None => panic!("Found no children on special node")
+                                }
+                            }
+                            _ => unimplemented!(),
+                        }
+                        if consider_children {
+                            match &node.children {
+                                Children::Multiple(children) => {
+                                    let (_,c,_,b) = callstack.last_mut().unwrap();
+                                    *b = false;
+                                    match children.get(*c) {
+                                        None => {
+                                            callstack.pop();
+                                        },
+                                        Some(n) => {
+                                            *c += 1;
+                                            callstack.push((*n, 0, string_index, true));
+                                        }
+                                    }
+                                }
+                                Children::Single(child) => {
+                                    callstack.pop();
+                                    callstack.push((*child, 0, string_index, true));
+                                }
+                                Children::None => panic!("Found no children on special node")
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -546,4 +1184,3 @@ pub(crate) fn pure_match(node_vec: &[Node], chars: &[char], start_index: usize, 
 //         }
 //     }
 // }
-

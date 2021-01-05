@@ -1,4 +1,4 @@
-use super::{constants::*, nfa::*, optimize::*, regex::Regex, utils::*, *};
+use super::{constants::*, nfa::*, optimize::*, regex::Regex, utils::*, *, compiled_node::CompiledNode};
 
 enum ParseMode {
     SquareBrackets(Vec<char>, u16),
@@ -12,22 +12,22 @@ enum MatchingEngineFlag {
     Backtrack,
     NFA,
     Hybrid,
-    DFA
+    DFA,
 }
 
 impl Regex {
     pub(crate) fn parse_expression(&mut self) {
-        let mut node_vec = Vec::<Node>::default();
-        node_vec.push(Node::new_transition());
-        node_vec.push(Node::End);
-        parse(&mut node_vec, str_to_char_vec(&self.expr));
-        node_vec.shrink_to_fit();
-        optimize(&mut node_vec);
-        self.node_vec = node_vec;
+        let mut nodes = parse(str_to_char_vec(&self.expr));
+        optimize(&mut nodes);
+        let (x,y) = CompiledNode::compile(nodes);
+        self.node_vec = x;
+        self.root_node = y;
     }
 }
 
-fn parse(node_vec: &mut Vec<Node>, mut string: Vec<char>) {
+fn parse(mut string: Vec<char>) -> Vec<Node> {
+    let mut _node_vec = vec![Node::Transition {children: vec![]}, Node::End];
+    let ref mut node_vec = _node_vec;
     let mut callstack = vec![0, 0];
     let mut upcoming_transition_stack = vec![1];
     let mut state_stack = vec![ParseMode::Normal];
@@ -70,7 +70,7 @@ fn parse(node_vec: &mut Vec<Node>, mut string: Vec<char>) {
                                     callstack.push(after_index);
                                     string_index += 2;
                                     closing_bracket = true;
-                                    continue
+                                    continue;
                                 }
                                 '>' => {
                                     after = Node::DropStack { children: vec![] };
@@ -87,13 +87,13 @@ fn parse(node_vec: &mut Vec<Node>, mut string: Vec<char>) {
                                     remove_brackets = true;
                                 }
                                 '=' => {
-                                    before = Node::StartLookAhead {children: vec![]};
-                                    after = Node::EndLookAhead {children: vec![] };
+                                    before = Node::StartLookAhead { children: vec![] };
+                                    after = Node::EndLookAhead { children: vec![] };
                                     parse_rest = true;
                                 }
                                 '!' => {
-                                    before = Node::StartNegativeLookAhead {children: vec![]};
-                                    after = Node::EndNegativeLookAhead {children: vec![]};
+                                    before = Node::StartNegativeLookAhead { children: vec![] };
+                                    after = Node::EndNegativeLookAhead { children: vec![] };
                                     parse_rest = true;
                                 }
                                 _ => unimplemented!(),
@@ -132,7 +132,7 @@ fn parse(node_vec: &mut Vec<Node>, mut string: Vec<char>) {
                         callstack.push(to_connect);
                         closing_bracket = true;
                         string_index += 1;
-                        continue
+                        continue;
                     }
                     '[' => {
                         state_stack.push(ParseMode::SquareBrackets(vec![], 1));
@@ -150,13 +150,13 @@ fn parse(node_vec: &mut Vec<Node>, mut string: Vec<char>) {
                     '+' => {
                         // if previous_char_is_closing_bracket(&string_index, &string) {
                         if closing_bracket {
-                            println!("hi");
+                            // println!("hi");
                             let last_node_index = callstack.last().unwrap();
                             let after = node_vec.get_mut(*last_node_index).unwrap();
                             let before_index = last_node_index - 1;
                             after.push_child(before_index);
                         } else {
-                            println!("hey");
+                            // println!("hey");
                             let x = callstack.last().unwrap().clone();
                             let node = node_vec.get_mut(x).unwrap();
                             node.push_child(x);
@@ -164,7 +164,7 @@ fn parse(node_vec: &mut Vec<Node>, mut string: Vec<char>) {
                     }
                     '*' => {
                         // if previous_char_is_closing_bracket(&string_index, &string) {
-                            if closing_bracket {
+                        if closing_bracket {
                             let last_node_index = callstack.pop().unwrap();
                             let after = node_vec.get_mut(last_node_index).unwrap();
                             let before_index = last_node_index - 1;
@@ -199,28 +199,28 @@ fn parse(node_vec: &mut Vec<Node>, mut string: Vec<char>) {
                             node_vec.get_mut(last_index).unwrap().insert_child(new_node_index);
                         } else {
                             // if previous_char_is_closing_bracket(&string_index, &string) {
-                                if closing_bracket {
+                            if closing_bracket {
                                 let before_index = callstack.last().unwrap() - 1;
-                                    let after_index = callstack.last().unwrap().clone();
-                                    let before = node_vec.get_mut(before_index).unwrap();
-                                    before.push_child(after_index);
+                                let after_index = callstack.last().unwrap().clone();
+                                let before = node_vec.get_mut(before_index).unwrap();
+                                before.push_child(after_index);
                             } else {
                                 let mut new_transition1 = Node::new_transition();
-                                    let new_transition2 = Node::new_transition();
-                                    let old = callstack.pop().unwrap();
-                                    let mut old_node = node_vec.get(old).unwrap().clone();
-                                    match new_transition1 {
-                                        Node::Transition { ref mut children } => {
-                                            children.push(node_vec.len());
-                                            children.push(node_vec.len() + 1);
-                                        }
-                                        _ => panic!(),
+                                let new_transition2 = Node::new_transition();
+                                let old = callstack.pop().unwrap();
+                                let mut old_node = node_vec.get(old).unwrap().clone();
+                                match new_transition1 {
+                                    Node::Transition { ref mut children } => {
+                                        children.push(node_vec.len());
+                                        children.push(node_vec.len() + 1);
                                     }
-                                    node_vec[old] = new_transition1;
-                                    old_node.push_child(node_vec.len() - 1);
-                                    node_vec.push(old_node);
-                                    node_vec.push(new_transition2);
-                                    callstack.push(node_vec.len() - 1);
+                                    _ => panic!(),
+                                }
+                                node_vec[old] = new_transition1;
+                                old_node.push_child(node_vec.len() - 1);
+                                node_vec.push(old_node);
+                                node_vec.push(new_transition2);
+                                callstack.push(node_vec.len() - 1);
                             }
                         }
                     }
@@ -235,23 +235,15 @@ fn parse(node_vec: &mut Vec<Node>, mut string: Vec<char>) {
             ParseMode::Escaped => {
                 match character {
                     'n' => add_character('\n', node_vec, &mut callstack),
-                    'd' => add_node(Node::new_from_chars(DIGITS, false), node_vec, &mut callstack),
-                    'D' => add_node(Node::new_from_chars(DIGITS, true), node_vec, &mut callstack),
-                    's' => add_node(Node::new_from_chars(WHITESPACE, false), node_vec, &mut callstack),
-                    'S' => add_node(Node::new_from_chars(WHITESPACE, true), node_vec, &mut callstack),
+                    'd' => add_node(Node::new_from_chars(DIGITS.to_vec(), false), node_vec, &mut callstack),
+                    'D' => add_node(Node::new_from_chars(DIGITS.to_vec(), true), node_vec, &mut callstack),
+                    's' => add_node(Node::new_from_chars(WHITESPACE.to_vec(), false), node_vec, &mut callstack),
+                    'S' => add_node(Node::new_from_chars(WHITESPACE.to_vec(), true), node_vec, &mut callstack),
                     'w' => {
-                        let mut vec = DIGITS.to_vec();
-                        vec.extend(UPPERCASE);
-                        vec.extend(LOWERCASE);
-                        vec.push('_');
-                        add_node(Node::new_from_chars(&vec, false), node_vec, &mut callstack);
+                        add_node(Node::new_from_chars(W.to_vec(), false), node_vec, &mut callstack);
                     }
                     'W' => {
-                        let mut vec = DIGITS.to_vec();
-                        vec.extend(UPPERCASE);
-                        vec.extend(LOWERCASE);
-                        vec.push('_');
-                        add_node(Node::new_from_chars(&vec, true), node_vec, &mut callstack);
+                        add_node(Node::new_from_chars(W.to_vec(), true), node_vec, &mut callstack);
                     }
                     'b' => {
                         add_node(Node::WordBoundary { children: vec![] }, node_vec, &mut callstack);
@@ -263,7 +255,7 @@ fn parse(node_vec: &mut Vec<Node>, mut string: Vec<char>) {
                         string_index += 1;
                         let character = string[string_index];
                         if let Some(c) = character.to_digit(26) {
-                            add_node(Node::new_from_char(c as u8 as char, false), node_vec, &mut callstack);
+                            add_node(Node::new_from_char(c as u8 as char), node_vec, &mut callstack);
                         } else {
                             panic!("Invalid Control Character");
                         }
@@ -294,7 +286,7 @@ fn parse(node_vec: &mut Vec<Node>, mut string: Vec<char>) {
                 }
             }
             ParseMode::SquareBrackets(expr, counter) => {
-                if character == '['&& !check_if_escaped(&string, string_index) {
+                if character == '[' && !check_if_escaped(&string, string_index) {
                     *counter += 1;
                 }
                 if character == ']' {
@@ -303,7 +295,7 @@ fn parse(node_vec: &mut Vec<Node>, mut string: Vec<char>) {
                         state_stack.pop();
                         string_index += 1;
                         closing_bracket = true;
-                        continue
+                        continue;
                     } else {
                         expr.push(string[string_index - 1]);
                     }
@@ -318,4 +310,5 @@ fn parse(node_vec: &mut Vec<Node>, mut string: Vec<char>) {
     let index = callstack.last().unwrap();
     let x = node_vec.get_mut(*index).unwrap();
     x.push_child(1);
+    return _node_vec;
 }
