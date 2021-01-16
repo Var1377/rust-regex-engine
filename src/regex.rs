@@ -8,9 +8,16 @@ use super::compiled_node::CompiledNode;
 pub struct Regex {
     pub expr: String,
     pub(crate) node_vec: Vec<CompiledNode>,
-    pub(crate) root_node: usize,
+    pub(crate) root_node_idx: usize,
+    pub(crate) root_node_clone: Option<CompiledNode>,
     pub(crate) engine: Mutex<MatchingEngine>,
     pub(crate) anchored: bool,
+}
+
+impl Clone for Regex {
+    fn clone(&self) -> Self {
+        return Self::new(&self.expr)
+    }
 }
 
 impl Regex {
@@ -19,7 +26,8 @@ impl Regex {
         return Regex {
             expr: String::new(),
             node_vec: vec![],
-            root_node: 0,
+            root_node_idx: 0,
+            root_node_clone: None,
             engine: Mutex::new(MatchingEngine::default()),
             anchored: false,
         };
@@ -46,10 +54,16 @@ impl RegexSet {
 
 use fxhash::FxHashMap;
 
+#[derive(Copy, Debug, Clone, PartialEq)]
+pub enum EngineFlag {
+    Backtrack,
+    Other
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum MatchingEngine {
     Backtrack {
-        callstack: Vec<(usize, usize, usize, bool)>,
+        callstack: Vec<(usize, usize, usize)>,
         backref_data: FxHashMap<String, u32>,
     },
     HybridAutomata {},

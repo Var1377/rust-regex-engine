@@ -3,71 +3,50 @@ use super::config::*;
 use super::nfa::*;
 use super::regex::*;
 use super::utils::*;
+use super::parallel_nfa;
 use std::ops::DerefMut;
 
 impl Regex {
+    pub fn is_match(&self, string: &str) -> bool {
+        match self.engine.lock().unwrap().deref_mut() {
+            MatchingEngine::Backtrack {callstack, backref_data: _} => {
+                // let chars = string.chars().collect::<Vec<_>>();
+                // return c_pure_match(&self.node_vec, &chars, callstack, self.root_node_idx);
+                return backtrack_pure_match(&self.node_vec, string.as_bytes(), self.root_node_idx, callstack);
+            },
+            MatchingEngine::ParallelNFA {} => {
+                return parallel_nfa::pure_match(&self.node_vec, string.as_bytes(), self.root_node_idx);
+            }
+            _ => unimplemented!(),
+        };
+    }
+
     pub fn match_str(&self, string: &str) -> bool {
-        // Make it here to avoid contant memory reallocation for every matching attempt
-        // It's cleared after every matching attempt
-        let ref s = str_to_char_vec(string);
-        return self.match_chars(s);
+        return self.is_match(string);
     }
 
-    pub fn match_string(&self, string: String) -> bool {
-        return self.match_str(string.as_str());
-    }
-
-    pub fn match_chars(&self, chars: &[char]) -> bool {
+    pub fn first_match(&self, string: &str) -> Option<(usize, usize)> {
         match self.engine.lock().unwrap().deref_mut() {
-            MatchingEngine::Backtrack {callstack, backref_data} => {
-                for i in 0..chars.len() {
-                    if c_pure_match(&self.node_vec, chars, callstack, i, self.root_node).is_some() {
-                        return true;
-                    }
-                }
-                return false;
+            MatchingEngine::Backtrack {callstack, backref_data: _} => {
+                return backtrack_first_match(&self.node_vec, string.as_bytes(), self.root_node_idx, callstack);
             },
+            MatchingEngine::ParallelNFA {} => {
+                return parallel_nfa::index_match(&self.node_vec, string.as_bytes(), self.root_node_idx);
+            }
             _ => unimplemented!(),
         };
     }
 
-    pub fn first_captures_chars(&self, chars: &[char]) -> Option<CapturesMap> {
+    pub fn match_indices(&self, string: &str) -> Vec<(usize, usize)> {
         match self.engine.lock().unwrap().deref_mut() {
-            MatchingEngine::Backtrack {callstack, backref_data} => {
-                for i in 0..chars.len() {
-                    let map = c_captures_match(&self.node_vec, chars, callstack, i, self.root_node);
-                    if map.is_some() { return map }
-                }
-                return None;
+            MatchingEngine::Backtrack {callstack, backref_data: _} => {
+                // let chars = string.char_indices().collect::<Vec<_>>();
+                // return c_indices_match(&self.node_vec, &chars, callstack, self.root_node_idx)
+                return backtrack_match_indices(&self.node_vec, string.as_bytes(), self.root_node_idx, callstack);
             },
-            _ => unimplemented!(),
-        };
-    }
-
-    pub fn first_captures_string(&self, string: &str) -> Option<CapturesMap> {
-        return self.first_captures_chars(&string.chars().collect::<Vec<_>>())
-    }
-
-    pub fn match_indices_chars(&self, chars: &[char]) -> Vec<(usize, usize)> {
-        let mut output = Vec::new();
-
-        match self.engine.lock().unwrap().deref_mut() {
-            MatchingEngine::Backtrack {callstack, backref_data} => {
-                let mut i = 0;
-                while i < chars.len() {
-                    let res =  c_pure_match(&self.node_vec, chars, callstack, i, self.root_node);
-                    match res {
-                        Some(end) => {
-                            println!("Found a match at {}, {}", i, end);
-                            output.push((i, end));
-                            i = end;
-                        }, 
-                        None => ()
-                    };
-                    i += 1;
-                }
-                return output;
-            },
+            MatchingEngine::ParallelNFA {} => {
+                return parallel_nfa::indices_match(&self.node_vec, string.as_bytes(), self.root_node_idx);
+            }
             _ => unimplemented!(),
         };
     }

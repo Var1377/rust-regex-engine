@@ -75,8 +75,6 @@ pub(crate) enum Node {
     },
     // Ending node
     End,
-    // Used on negative lookarounds
-    Fail,
     // Epsilon Transition State, Ideally removed by the time it reaches the matching engine.
     Transition {
         #[derivative(PartialEq = "ignore", Hash = "ignore")]
@@ -261,13 +259,13 @@ impl Node {
 
     #[inline]
     pub fn push_child(&mut self, to_add: usize) {
-        let mut children = self.get_children_mut().unwrap();
+        let children = self.get_children_mut().unwrap();
         children.push(to_add);
     }
 
     #[inline]
     pub fn insert_child(&mut self, to_add: usize) {
-        let mut children = self.get_children_mut().unwrap();
+        let children = self.get_children_mut().unwrap();
         children.insert(0, to_add);
     }
 
@@ -302,13 +300,13 @@ impl Node {
         children.insert(0, to_add);
     }
 
-    pub fn to_cnode(self, old_to_new: &fnv::FnvHashMap<usize,usize>) -> CompiledNode {
+    pub fn to_cnode(self, old_to_new: &fnv::FnvHashMap<usize,usize>) -> (CompiledNode, bool) {
         let children: Children = match self.get_children() {
             Some(c) => {
                 if c.len() == 1 {
                     Children::Single(*old_to_new.get(c.get(0).expect("No items in children")).expect(&format!("{} not in old_to_new", c.get(0).unwrap())))
                 } else {
-                    let mut vec = c.iter()
+                    let vec = c.iter()
                     .map(|v| {
                         return *old_to_new.get(v).unwrap();
                     })
@@ -323,6 +321,7 @@ impl Node {
         };
 
         use crate::utf_8::CharLen;
+        use crate::utils::RangeUtils;
 
         let node: CNode = match self {
             MatchOne { character, .. } => CNode::Match(MatchNode::One(One::MatchOne(character))),
@@ -340,8 +339,14 @@ impl Node {
                     CNode::Match(MatchNode::Range(Range::Exclusive(SortedVec::from(characters))))
                 }
             }
-            InclusiveRange { characters, .. } => CNode::Match(MatchNode::Range(Range::InclusiveRange(characters))),
-            ExclusiveRange { characters, .. } => CNode::Match(MatchNode::Range(Range::ExclusiveRange(characters))),
+            InclusiveRange { mut characters, .. } => {
+                characters.minimize();
+                CNode::Match(MatchNode::Range(Range::InclusiveRange(characters)))
+            },
+            ExclusiveRange { mut characters, .. } => {
+                characters.minimize();
+                CNode::Match(MatchNode::Range(Range::ExclusiveRange(characters)))
+            },
             MatchAll { .. } => CNode::Match(MatchNode::One(One::NotMatchOne('\n'))),
             MatchAllandNL { .. } => CNode::Match(MatchNode::One(One::MatchAll)),
             BeginningOfLine { .. } => CNode::Anchor(AnchorNode::BeginningOfLine),
@@ -350,26 +355,46 @@ impl Node {
             EndOfString { .. } => CNode::Anchor(AnchorNode::EndOfString),
             WordBoundary {..} => CNode::Anchor(AnchorNode::WordBoundary),
             NotWordBoundary {..} => CNode::Anchor(AnchorNode::NotWordBoundary),
-            End => CNode::Special(SpecialNode::End),
-            Fail => CNode::Special(SpecialNode::Fail),
+            End => CNode::End,
             Transition {..} => CNode::Behaviour(BehaviourNode::Transition),
             ExclusiveNodes {..} => unimplemented!(),
             CapGroup {number, ..} => CNode::Behaviour(BehaviourNode::CapGroup(number)),
-            StartLookAhead {..} => CNode::Special(SpecialNode::StartLookAhead),
+            StartLookAhead {children} => {
+                return (CompiledNode {
+                    children: Children::Multiple(children.into_iter().map(|v| {
+                        return *old_to_new.get(&v).unwrap();
+                    })
+                    .collect()),
+                    node: CNode::Special(SpecialNode::StartLookAhead)
+                }, true);
+            },
             EndLookAhead {..} => CNode::Special(SpecialNode::EndLookAhead),
-            StartNegativeLookAhead {..} => CNode::Special(SpecialNode::StartNegativeLookAhead),
+            StartNegativeLookAhead {children} => {
+                return (CompiledNode {
+                    children: Children::Multiple(children.into_iter().map(|v| {
+                        return *old_to_new.get(&v).unwrap();
+                    })
+                    .collect()),
+                    node: CNode::Special(SpecialNode::StartNegativeLookAhead)
+                }, true);
+            },
             EndNegativeLookAhead {..} => CNode::Special(SpecialNode::EndNegativeLookAhead),
             StartLookBack {length, ..} => CNode::Special(SpecialNode::StartLookBack(length)),
             StartVariableLookBack {start, end, ..} => CNode::Special(SpecialNode::StartVariableLookback(start, end)),
             BackRef {number, ..} => CNode::Special(SpecialNode::BackRef(number)),
-            DropStack {..} => CNode::Behaviour(BehaviourNode::DropStack),
+            DropStack {..} => CNode::Special(SpecialNode::DropStack),
             EndCapGroup {number, ..} => CNode::Behaviour(BehaviourNode::EndCapGroup(number)),
             GlobalRecursion {..} => CNode::Special(SpecialNode::GlobalRecursion),
         };
 
-        return CompiledNode {
+        let special = match &node {
+            CNode::Special(_) => true,
+            _ => false 
+        };
+
+        return (CompiledNode {
             children, node
-        }
+        }, special)
     }
 
     // pub fn optimize(&mut self) {

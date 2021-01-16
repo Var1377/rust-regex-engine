@@ -1,5 +1,6 @@
-#![allow(dead_code, unused_mut, unused_imports, unused_variables, unreachable_patterns)]
-#![feature(test)]
+// #![allow(dead_code, unused_mut, unused_imports, unused_variables, unreachable_patterns)]
+#![allow(dead_code, unused_imports, unreachable_patterns)]
+#![feature(test, assoc_char_funcs)]
 
 extern crate fnv;
 extern crate fxhash;
@@ -9,12 +10,13 @@ extern crate test;
 mod tests {
     use super::*;
     use config::*;
-    use regex::Regex;
+    use crate::regex::Regex;
     use test::Bencher;
 
     #[test]
     fn compile_test() {
         let _r = Regex::new("aabbccdd");
+        println!("{:?}", _r);
     }
 
     #[test]
@@ -36,7 +38,6 @@ mod tests {
 
     #[test]
     fn or_operator() {
-        // Won't work without brackets surrounding it
         let r = Regex::new("a|b|c");
         // println!("{:?}", r.node_vec);
         assert_eq!(r.match_str("ab"), true);
@@ -334,10 +335,23 @@ mod tests {
     }
 
     #[test]
-    fn rly_huge_test() {
+    fn boundary() {
+        let r = Regex::new(r"\b\w+\b");
+        let string = "This is a group of words";
+        let matches = r.match_indices(&string);
+        println!("{:?}", matches);
+    } 
+
+    #[test]
+    fn benchmark_but_only_run_once() {
         let r = Regex::new(r"[\w\.+-]+@[\w\.-]+\.[\w\.-]+");
-        let input: Vec<char> = include_str!(r"../input_text.txt").chars().collect();
-        println!("{}", r.match_indices_chars(&input).len());
+        let input = include_str!(r"../input_text.txt");
+        let now = std::time::Instant::now();
+        println!("{:?}", r.match_indices(input));
+        let elapsed: String = format!("{}",now.elapsed().as_millis());
+        let mut file = std::fs::File::create("./log.txt").unwrap();
+        use std::io::Write;
+        write!(file, "{}", elapsed).unwrap();
     }
 
     #[bench]
@@ -346,7 +360,7 @@ mod tests {
         b.iter(|| {
             assert_eq!(phone.match_str("+447777-666-555"), true);
             assert_eq!(phone.match_str("test@gmail.com"), false);
-        });
+        }); 
     }
 
     #[bench]
@@ -357,7 +371,7 @@ mod tests {
         });
     }
 
-    // #[bench]
+    #[bench]
     fn compile_benchmark(b: &mut Bencher) {
         b.iter(|| {
             let _i = test::black_box(Regex::new(r"^\+*\(?[0-9]+\)?[-\s\.0-9]*$"));
@@ -367,19 +381,19 @@ mod tests {
     #[bench]
     fn really_really_huge_bench(b: &mut Bencher) {
         let r = Regex::new(r"[\w\.+-]+@[\w\.-]+\.[\w\.-]+");
-        let input: Vec<char> = include_str!(r"../input_text.txt").chars().collect();
+        let input = include_str!(r"../input_text.txt");
         b.iter(|| {
-            println!("{}", r.match_indices_chars(&input).len());
+            test::black_box(r.match_indices(input));
         })
     }
 
-    // #[bench]
-    fn test_str_to_char_conversion(b: &mut Bencher) {
-        let s = include_str!(r"../input_text.txt");
-        b.iter(|| {
-            let _ = test::black_box(super::utils::str_to_char_vec(s));
-        })
-    }
+    // // #[bench]
+    // fn test_str_to_char_conversion(b: &mut Bencher) {
+    //     let s = include_str!(r"../input_text.txt");
+    //     b.iter(|| {
+    //         let _ = test::black_box(super::utils::str_to_char_vec(s));
+    //     })
+    // }
 }
 
 mod backtrack_matcher;
