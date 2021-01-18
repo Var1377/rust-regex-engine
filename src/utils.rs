@@ -1,4 +1,4 @@
-use super::{constants::*, nfa::*, compiled_node::OptionBool};
+use super::{compiled_node::OptionBool, constants::*, nfa::*};
 
 pub fn remove_duplicates_without_sort<T: PartialEq + Eq + std::hash::Hash + Copy>(vec: &mut Vec<T>, set: &mut fxhash::FxHashSet<T>) {
     // Linear time complexity and reuses allocations in the set
@@ -25,8 +25,8 @@ impl RangeUtils for Vec<(char, char)> {
     fn invert(&mut self) {
         let mut new = vec![];
         for (start, end) in self.iter() {
-            new.push((0 as char, unsafe { char::from_u32_unchecked((*start as u32).saturating_sub(1))}));
-            new.push((unsafe {char::from_u32_unchecked((*end as u32).saturating_add(1))}, std::char::MAX));
+            new.push((0 as char, unsafe { char::from_u32_unchecked((*start as u32).saturating_sub(1)) }));
+            new.push((unsafe { char::from_u32_unchecked((*end as u32).saturating_add(1)) }, std::char::MAX));
         }
         // new.minimize();
         *self = new;
@@ -34,7 +34,7 @@ impl RangeUtils for Vec<(char, char)> {
 
     fn minimize(&mut self) {
         if self.is_empty() {
-            return
+            return;
         }
         self.sort_unstable();
         self.dedup();
@@ -113,8 +113,6 @@ pub(crate) fn parse_range_character(c: char) -> Node {
     };
 }
 
-
-
 pub(crate) fn parse_square_brackets(chars: &mut Vec<char>, node_vec: &mut Vec<Node>, callstack: &mut Vec<usize>) -> bool {
     // println!("Square Expression: {:?}", chars);
     if chars.len() == 0 {
@@ -169,24 +167,24 @@ pub(crate) fn parse_square_brackets(chars: &mut Vec<char>, node_vec: &mut Vec<No
                     ranges.push(('a', 'z'));
                     ranges.push(('A', 'Z'));
                     match_characters.push('_');
-                },
+                }
                 'W' => {
                     no_match_ranges.push(('a', 'z'));
                     no_match_ranges.push(('A', 'Z'));
                     no_match_characters.push('_');
-                },
+                }
                 's' => {
                     match_characters.extend(WHITESPACE);
-                },
+                }
                 'S' => {
                     no_match_characters.extend(WHITESPACE);
-                },
+                }
                 'd' => {
                     ranges.push(('0', '9'));
-                },
+                }
                 'D' => {
                     no_match_ranges.push(('0', '9'));
-                },
+                }
                 _ => match_characters.push(character),
             }
         } else {
@@ -214,15 +212,28 @@ pub(crate) fn parse_square_brackets(chars: &mut Vec<char>, node_vec: &mut Vec<No
     ranges.append(&mut no_match_ranges);
     std::mem::drop(no_match_ranges);
 
-
     if exclusive {
         if ranges.is_empty() && match_characters.is_empty() {
-            add_node(Node::Exclusive {children: vec![], characters: vec![]}, node_vec, callstack);
+            add_node(
+                Node::Exclusive {
+                    children: vec![],
+                    characters: vec![],
+                },
+                node_vec,
+                callstack,
+            );
             return false;
         }
 
         if ranges.is_empty() {
-            add_node(Node::Exclusive {children: vec![], characters: match_characters}, node_vec, callstack);
+            add_node(
+                Node::Exclusive {
+                    children: vec![],
+                    characters: match_characters,
+                },
+                node_vec,
+                callstack,
+            );
             return false;
         }
 
@@ -230,7 +241,14 @@ pub(crate) fn parse_square_brackets(chars: &mut Vec<char>, node_vec: &mut Vec<No
         ranges.minimize();
 
         if match_characters.is_empty() {
-            add_node(Node::ExclusiveRange {characters: ranges, children: vec![]}, node_vec, callstack);
+            add_node(
+                Node::ExclusiveRange {
+                    characters: ranges,
+                    children: vec![],
+                },
+                node_vec,
+                callstack,
+            );
             return false;
         }
 
@@ -243,17 +261,31 @@ pub(crate) fn parse_square_brackets(chars: &mut Vec<char>, node_vec: &mut Vec<No
         // Determine the cost for putting it all into a range
         let r_cost = ((ranges.len() + match_characters.len()) as f32 * 2f32).log2().ceil() as usize;
 
-        if r_cost > c_cost {
+        if r_cost < c_cost {
             for character in match_characters {
                 ranges.push((character, character));
             }
             // It will get minimized again when it reaches the compilation stage
-            add_node(Node::ExclusiveRange {children: vec![], characters: ranges}, node_vec, callstack);
+            add_node(
+                Node::ExclusiveRange {
+                    children: vec![],
+                    characters: ranges,
+                },
+                node_vec,
+                callstack,
+            );
         } else {
             for (start, end) in ranges {
                 (start..=end).for_each(|v| match_characters.push(v));
             }
-            add_node(Node::Exclusive {children: vec![], characters: match_characters}, node_vec, callstack);
+            add_node(
+                Node::Exclusive {
+                    children: vec![],
+                    characters: match_characters,
+                },
+                node_vec,
+                callstack,
+            );
         }
 
         return false;
@@ -261,7 +293,14 @@ pub(crate) fn parse_square_brackets(chars: &mut Vec<char>, node_vec: &mut Vec<No
         ranges.minimize();
 
         if ranges.is_empty() && match_characters.is_empty() {
-            add_node(Node::Inclusive {children: vec![], characters: vec![]}, node_vec, callstack);
+            add_node(
+                Node::Inclusive {
+                    children: vec![],
+                    characters: vec![],
+                },
+                node_vec,
+                callstack,
+            );
             return false;
         }
 
@@ -269,29 +308,45 @@ pub(crate) fn parse_square_brackets(chars: &mut Vec<char>, node_vec: &mut Vec<No
         // This tries to predict the numver of branches each implementation
         //  takes on it's worst case and determines the most efficient route
 
-        // Character only cose
+        // Character only cost
         use std::iter::Sum;
         let ranges_sum = u32::sum(ranges.iter().map(|v| v.1 as u32 - v.0 as u32));
         let c_cost = (ranges_sum as f32 + match_characters.len() as f32).log2().ceil() as usize;
         // Ranges only cost
-        let r_cost = ((ranges.len() + match_characters.len()) as f32 * 2f32).log2().ceil() as usize;
+        let r_cost = ((ranges.len() + match_characters.len()) as f32 * 1.5f32).log2().ceil() as usize;
 
         // Putting it in two nodes, undesired because it's very inefficient with a large amount of non-matches
         // Therefore we add a constant to prevent all but the most needed cases to use more than one node
-        let d_cost = 16 + (((ranges.len()*2) as f32).log2().ceil() as usize) + (((match_characters.len()) as f32).log2().ceil() as usize);
+        let d_cost = 16 + (((ranges.len() * 2) as f32).log2().ceil() as usize) + (((match_characters.len()) as f32).log2().ceil() as usize);
 
-        if r_cost > c_cost && r_cost > d_cost {
+        // println!("C: {}, R: {}, D: {}")
+
+        if r_cost < c_cost && r_cost < d_cost {
             for character in match_characters {
                 ranges.push((character, character));
             }
             // It will get minimized again when it reaches the compilation stage
-            add_node(Node::InclusiveRange {children: vec![], characters: ranges}, node_vec, callstack);
+            add_node(
+                Node::InclusiveRange {
+                    children: vec![],
+                    characters: ranges,
+                },
+                node_vec,
+                callstack,
+            );
             return false;
-        } else if c_cost > d_cost {
+        } else if c_cost < d_cost {
             for (start, end) in ranges {
                 (start..=end).for_each(|v| match_characters.push(v));
             }
-            add_node(Node::Inclusive {children: vec![], characters: match_characters}, node_vec, callstack);
+            add_node(
+                Node::Inclusive {
+                    children: vec![],
+                    characters: match_characters,
+                },
+                node_vec,
+                callstack,
+            );
             return false;
         } else {
             let before_index = node_vec.len();
@@ -302,8 +357,14 @@ pub(crate) fn parse_square_brackets(chars: &mut Vec<char>, node_vec: &mut Vec<No
             node_vec.push(after);
             callstack.pop();
             callstack.push(after_index);
-            let range_node = Node::InclusiveRange {characters: ranges, children: vec![after_index]};
-            let character_node = Node::Inclusive {characters: match_characters, children: vec![after_index]};
+            let range_node = Node::InclusiveRange {
+                characters: ranges,
+                children: vec![after_index],
+            };
+            let character_node = Node::Inclusive {
+                characters: match_characters,
+                children: vec![after_index],
+            };
             node_vec.push(range_node);
             node_vec.push(character_node);
 
@@ -314,148 +375,18 @@ pub(crate) fn parse_square_brackets(chars: &mut Vec<char>, node_vec: &mut Vec<No
             return true;
         }
     }
-
-
-
-
-    // Remove and parse ranges eg. a-z,0-9
-    // let mut last_dash = None;
-    // let mut offset = 0;
-
-    // tokens
-    //     .iter()
-    //     .enumerate()
-    //     .filter(|v| *v.1 == ('-', false) && (v.0 != 0 || v.0 != tokens.len() - 1))
-    //     .map(|v| v.0)
-    //     .collect::<Vec<_>>()
-    //     .into_iter()
-    //     .filter_map(|v| {
-    //         if let Some(last_dash) = last_dash {
-    //             if v - last_dash <= 2 {
-    //                 return None
-    //             }
-    //         }
-    //         let (c1,_, c2) = (tokens.remove(v - 1 - offset),tokens.remove(v - 1 - offset), tokens.remove(v - 1 - offset));
-
-    //         offset += 3;
-    //         last_dash = Some(v);
-    //         Some((c1.0, c2.0))
-    //     })
-    //     .for_each(|v| ranges.push(v));
-
-    // while i < len {
-    //     let character = chars[i];
-    //     if character == '-' {
-    //         if i != 0 && chars[i - 1] != BACKSLASH && i != len - 1 {
-    //             ranges.push((chars[i - 1], chars[i + 1]));
-    //         } else {
-    //             rest_of_chars.push(character);
-    //         }
-    //     } else {
-    //         if i == 0 {
-    //             if len > 1 {
-    //                 if chars[i + 1] == '-' {
-    //                 } else {
-    //                     rest_of_chars.push(character)
-    //                 }
-    //             } else {
-    //                 rest_of_chars.push(character);
-    //             }
-    //         } else if i == len - 1 {
-    //             if chars[i - 1] == '-' {
-    //             } else {
-    //                 rest_of_chars.push(character);
-    //             }
-    //         } else {
-    //             if chars[i - 1] == '-' || chars[i + 1] == '-' {
-    //                 if character != BACKSLASH {
-    //                 } else {
-    //                     rest_of_chars.push(character);
-    //                 }
-    //             } else {
-    //                 rest_of_chars.push(character);
-    //             }
-    //         }
-    //     }
-    //     i += 1;
-    // }
-    // for range in ranges {
-    //     let (c1, c2) = range;
-    //     nodes.push(Node::);
-    // }
-    // let len = rest_of_chars.len();
-    // let mut escaped = false;
-    // i = 0;
-    // let mut final_range = vec![];
-    // while i < len {
-    //     let character = rest_of_chars[i];
-    //     if escaped {
-    //         let lookback = rest_of_chars[i - 1];
-    //         match lookback {
-    //             BACKSLASH => match character {
-    //                 'd' | 'D' | 'b' | 'B' | 'w' | 'W' | 's' | 'S' => {
-    //                     nodes.push(parse_range_character(character));
-    //                 }
-    //                 _ => {
-    //                     if exclusive {
-    //                         nodes.push(Node::new_from_char(character));
-    //                     } else {
-    //                         nodes.push(Node::new_from_chars(vec![character], exclusive));
-    //                     }
-    //                 }
-    //             },
-    //             _ => (),
-    //         }
-    //         escaped = false;
-    //     } else {
-    //         match character {
-    //             BACKSLASH => escaped = true,
-    //             _ => {
-    //                 final_range.push(character);
-    //             }
-    //         };
-    //     }
-    //     i += 1;
-    // }
-    // nodes.push(Node::new_from_chars(final_range, exclusive));
-    // for mut node in nodes {
-    //     let node_vec_len = node_vec.len();
-    //     match node_vec.get_mut(before_index).unwrap() {
-    //         Node::Transition { ref mut children, .. } => {
-    //             children.push(node_vec_len);
-    //         }
-    //         _ => panic!(),
-    //     }
-    //     node.push_child(after_index);
-    //     node_vec.push(node);
-    // }
-    // let to_connect = callstack.pop().unwrap();
-    // let to_connect = node_vec.get_mut(to_connect).unwrap();
-    // to_connect.push_child(before_index);
-    // callstack.push(after_index);
-    // true
 }
 
-pub(crate) fn parse_curly_brackets(
-    contents: &Vec<char>,
-    string: &mut Vec<char>,
-    string_index: &usize,
-    node_vec: &mut Vec<Node>,
-    callstack: &mut Vec<usize>,
-    _lazy: bool,
-) {
-    // println!("{:?}", contents);
+pub(crate) fn parse_curly_brackets(contents: &Vec<char>, closing_bracket: bool, node_vec: &mut Vec<Node>, callstack: &mut Vec<usize>, _lazy: bool) {
     let pos_of_comma = contents.iter().position(|c| *c == ',');
     if let Some(p) = pos_of_comma {
         if p == contents.len() - 1 {
-            println!("3");
             let mut s1 = String::new();
             for i in 0..p {
                 s1.push(contents[i]);
             }
             let to_repeat = s1.parse::<usize>().unwrap() - 1;
-            if previous_char_is_closing_bracket(string_index, string) {
-                // println!("{:?}", node_vec);
+            if closing_bracket {
                 for _ in 0..to_repeat {
                     let to_connect = callstack.pop().unwrap();
                     let before_index = to_connect - 1;
@@ -479,25 +410,27 @@ pub(crate) fn parse_curly_brackets(
                     }
                     callstack.push(node_vec.len() + 1);
                     node_vec.extend(new_nodes);
-                    // println!("{:?}", node_vec);
                 }
                 let last_node_index = callstack.last().unwrap();
                 let after = node_vec.get_mut(*last_node_index).unwrap();
                 let before_index = last_node_index - 1;
                 after.get_transition_children_mut().push(before_index);
             } else {
-                let mut escaped = false;
-                if check_if_escaped(&string, *string_index - 1) {
-                    escaped = true;
-                }
-                string.insert(*string_index, '+');
-                let previous_character = string[*string_index - 1];
-                for _ in 0..to_repeat {
-                    string.insert(*string_index, previous_character);
-                    if escaped {
-                        string.insert(*string_index, BACKSLASH);
+                let last_index = callstack.pop().unwrap();
+                let len = node_vec.len();
+                node_vec.get_mut(last_index).unwrap().get_children_mut().unwrap().push(len);
+                for i in 0..to_repeat {
+                    let mut clone = node_vec.get(last_index).unwrap().clone();
+                    let children = clone.get_children_mut().unwrap();
+                    children.clear();
+                    if i != to_repeat - 1 {
+                        children.push(node_vec.len() + 1);
+                    } else {
+                        children.push(node_vec.len());
                     }
+                    node_vec.push(clone);
                 }
+                callstack.push(node_vec.len() - 1);
             }
         } else {
             let mut s1 = String::new();
@@ -510,7 +443,7 @@ pub(crate) fn parse_curly_brackets(
             }
             let int1 = s1.parse::<usize>().unwrap();
             let int2 = s2.parse::<usize>().unwrap() - int1;
-            if previous_char_is_closing_bracket(string_index, string) {
+            if closing_bracket {
                 for _ in 0..int1 - 1 {
                     let to_connect = callstack.pop().unwrap();
                     let before_index = to_connect - 1;
@@ -564,24 +497,38 @@ pub(crate) fn parse_curly_brackets(
                     before.push_child(after_index);
                 }
             } else {
-                let mut escaped = false;
-                if check_if_escaped(&string, *string_index - 1) {
-                    escaped = true;
+                let last_index = callstack.pop().unwrap();
+                let len = node_vec.len();
+                let final_index = int2 + int1 - 1 + len;
+                node_vec.get_mut(last_index).unwrap().get_children_mut().unwrap().push(len);
+                for i in 1..int1 {
+                    let mut clone = node_vec.get(last_index).unwrap().clone();
+                    let children = clone.get_children_mut().unwrap();
+                    children.clear();
+                    if i != int1 - 1 {
+                        children.push(node_vec.len() + 1);
+                    } else {
+                        children.push(final_index);
+                    }
+                    node_vec.push(clone);
                 }
-                let previous_character = string[*string_index - 1];
+                callstack.push(node_vec.len() - 1);
+
+                // --------------------Add Optional Nodes----------------------
+
+                let last_index = callstack.pop().unwrap();
+                let len = node_vec.len();
+                node_vec.get_mut(last_index).unwrap().get_children_mut().unwrap().insert(0, len);
                 for _ in 0..int2 {
-                    string.insert(*string_index, '?');
-                    string.insert(*string_index, previous_character);
-                    if escaped {
-                        string.insert(*string_index, BACKSLASH);
-                    }
+                    let mut clone = node_vec.get(last_index).unwrap().clone();
+                    let children = clone.get_children_mut().unwrap();
+                    children.clear();
+                    children.push(node_vec.len() + 1);
+                    children.push(final_index);
+                    node_vec.push(clone);
                 }
-                for _ in 0..int1 - 1 {
-                    string.insert(*string_index, previous_character);
-                    if escaped {
-                        string.insert(*string_index, BACKSLASH);
-                    }
-                }
+                callstack.push(node_vec.len());
+                node_vec.push(Node::new_transition());
             }
             // Ends in a number, x-> y times
         }
@@ -590,9 +537,8 @@ pub(crate) fn parse_curly_brackets(
         for character in contents {
             s1.push(*character);
         }
-        println!("{}", s1);
         let to_repeat = s1.parse::<usize>().unwrap();
-        if previous_char_is_closing_bracket(string_index, string) {
+        if closing_bracket {
             for _ in 0..to_repeat - 1 {
                 let to_connect = callstack.pop().unwrap();
                 let before_index = to_connect - 1;
@@ -618,17 +564,19 @@ pub(crate) fn parse_curly_brackets(
                 node_vec.extend(new_nodes);
             }
         } else {
-            let mut escaped = false;
-            if check_if_escaped(&string, *string_index - 1) {
-                escaped = true;
-            }
-            let previous_character = string[*string_index - 1];
-            for _ in 0..to_repeat - 1 {
-                string.insert(*string_index, previous_character);
-                if escaped {
-                    string.insert(*string_index, BACKSLASH);
+            let last_index = callstack.pop().unwrap();
+            let len = node_vec.len();
+            node_vec.get_mut(last_index).unwrap().get_children_mut().unwrap().push(len);
+            for i in 1..to_repeat {
+                let mut clone = node_vec.get(last_index).unwrap().clone();
+                let children = clone.get_children_mut().unwrap();
+                children.clear();
+                if i != to_repeat - 1 {
+                    children.push(node_vec.len() + 1);
                 }
+                node_vec.push(clone);
             }
+            callstack.push(node_vec.len() - 1);
         }
     }
 }

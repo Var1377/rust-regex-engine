@@ -6,7 +6,7 @@ pub struct SortedVec<T: Ord> {
 
 impl<T: Ord> SortedVec<T> {
     pub fn new() -> Self {
-        return Self {vec: Vec::new()}
+        return Self { vec: Vec::new() };
     }
 
     #[inline]
@@ -22,8 +22,8 @@ impl<T: Ord> SortedVec<T> {
     pub fn position_of(&self, target: &T) -> Option<usize> {
         return match self.vec.binary_search(target) {
             Ok(idx) => Some(idx),
-            Err(_) => None
-        }
+            Err(_) => None,
+        };
     }
 
     // Simple binary search for O(log(n)) time complexity, quicker than hashmaps for small vecs
@@ -47,7 +47,7 @@ impl<T: Ord> SortedVec<T> {
             }
             size -= half;
         }
-        if unsafe {self.vec.get_unchecked(base)} == target {
+        if unsafe { self.vec.get_unchecked(base) } == target {
             return true;
         } else {
             return false;

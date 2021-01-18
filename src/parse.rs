@@ -1,4 +1,4 @@
-use super::{constants::*, nfa::*, optimize::*, regex::*, utils::*, *, compiled_node::CompiledNode};
+use super::{compiled_node::CompiledNode, constants::*, nfa::*, optimize::*, regex::*, utils::*, *};
 
 enum ParseMode {
     SquareBrackets(Vec<char>, u16),
@@ -12,20 +12,19 @@ impl Regex {
     pub(crate) fn parse_expression(&mut self) {
         let mut nodes = parse(str_to_char_vec(&self.expr));
         optimize(&mut nodes);
-        let (x,y, f) = CompiledNode::compile(nodes);
+        let (x, y, f) = CompiledNode::compile(nodes);
         self.node_vec = x;
         self.root_node_idx = y;
         self.engine = std::sync::Mutex::new(match f {
             EngineFlag::Backtrack => Default::default(),
-            EngineFlag::Other => {
-               MatchingEngine::ParallelNFA {}
-            }
+            EngineFlag::Other => MatchingEngine::ParallelNFA {},
         });
+        self.optimized_root_node = crate::root_node_optimizer::RootNode::generate(&self.node_vec, y, None);
     }
 }
 
 fn parse(mut string: Vec<char>) -> Vec<Node> {
-    let mut _node_vec = vec![Node::Transition {children: vec![]}, Node::End];
+    let mut _node_vec = vec![Node::Transition { children: vec![] }, Node::End];
     let ref mut node_vec = _node_vec;
     let mut callstack = vec![0, 0];
     let mut upcoming_transition_stack = vec![1];
@@ -99,6 +98,10 @@ fn parse(mut string: Vec<char>) -> Vec<Node> {
                             }
                         } else {
                             before = Node::CapGroup {
+                                children: Vec::new(),
+                                number: current_cap_group,
+                            };
+                            after = Node::EndCapGroup {
                                 children: Vec::new(),
                                 number: current_cap_group,
                             };
@@ -197,7 +200,6 @@ fn parse(mut string: Vec<char>) -> Vec<Node> {
                             callstack.push(new_node_index);
                             node_vec.get_mut(last_index).unwrap().insert_child(new_node_index);
                         } else {
-                            // if previous_char_is_closing_bracket(&string_index, &string) {
                             if closing_bracket {
                                 let before_index = callstack.last().unwrap() - 1;
                                 let after_index = callstack.last().unwrap().clone();
@@ -216,7 +218,7 @@ fn parse(mut string: Vec<char>) -> Vec<Node> {
                                     _ => panic!(),
                                 }
                                 node_vec[old] = new_transition1;
-                                old_node.push_child(node_vec.len() - 1);
+                                old_node.push_child(node_vec.len() + 1);
                                 node_vec.push(old_node);
                                 node_vec.push(new_transition2);
                                 callstack.push(node_vec.len() - 1);
@@ -226,7 +228,7 @@ fn parse(mut string: Vec<char>) -> Vec<Node> {
                     '{' => {
                         state_stack.push(ParseMode::CurlyBrackets(vec![]));
                         string.remove(string_index);
-                        string_index -= 1;
+                        continue;
                     }
                     _ => add_character(character, node_vec, &mut callstack),
                 }
@@ -276,13 +278,15 @@ fn parse(mut string: Vec<char>) -> Vec<Node> {
                     } else {
                         lazy = false;
                     }
-                    parse_curly_brackets(&expr, &mut string, &mut string_index, node_vec, &mut callstack, lazy);
+                    parse_curly_brackets(&expr, closing_bracket, node_vec, &mut callstack, lazy);
                     string_index -= 1;
                     state_stack.pop();
                 } else {
                     expr.push(string.remove(string_index));
                     string_index -= 1;
                 }
+                string_index += 1;
+                continue;
             }
             ParseMode::SquareBrackets(expr, counter) => {
                 if character == '[' && !check_if_escaped(&string, string_index) {
@@ -293,7 +297,6 @@ fn parse(mut string: Vec<char>) -> Vec<Node> {
                         closing_bracket = parse_square_brackets(expr, node_vec, &mut callstack);
                         state_stack.pop();
                         string_index += 1;
-                        // closing_bracket = true;
                         continue;
                     } else {
                         expr.push(string[string_index - 1]);

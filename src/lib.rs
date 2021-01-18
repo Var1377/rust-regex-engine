@@ -9,14 +9,22 @@ extern crate test;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use config::*;
     use crate::regex::Regex;
+    use config::*;
     use test::Bencher;
+
+    fn debug_print(r: &Regex) {
+        for (index, node) in r.node_vec.iter().enumerate() {
+            println!("{} -- {:?}", index, node);
+        }
+    }
 
     #[test]
     fn compile_test() {
-        let _r = Regex::new("aabbccdd");
-        println!("{:?}", _r);
+        let _r = Regex::new(r"(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9])");
+        // let _r = Regex::new(r"[\w\.+-]+@[\w\.-]+\.[\w\.-]+");
+        // println!("{:?}", _r);
+        println!("{:?}", _r.optimized_root_node);
     }
 
     #[test]
@@ -99,7 +107,7 @@ mod tests {
     }
 
     #[test]
-    fn range_of_chars() {
+    fn range_of_chars_simple() {
         let r = Regex::new("[a-zA-Z]");
         // println!("{:?}", r.node_vec);
         assert_eq!(r.match_str("g"), true);
@@ -198,6 +206,7 @@ mod tests {
     #[test]
     fn question_mark_with_square_brackets() {
         let r = Regex::new("abc[def]?hij");
+        // debug_print(&r);
         // println!("{:?}", r.node_vec);
         assert_eq!(r.match_str("abcdhij"), true);
         assert_eq!(r.match_str("abcehij"), true);
@@ -229,7 +238,7 @@ mod tests {
     }
 
     #[test]
-    fn single_character_curly_brackets() {
+    fn single_character_curly_brackets_one() {
         let r = Regex::new("^a{4}b{2}c$");
         assert_eq!(r.match_str("aaaabbc"), true);
         assert_eq!(r.match_str("aaabc"), false);
@@ -238,7 +247,6 @@ mod tests {
     #[test]
     fn single_character_curly_brackets_comma() {
         let r = Regex::new("^a{4,}b{2,}c$");
-        // println!("{:?}", r.node_vec);
         assert_eq!(r.match_str("aaaaaaaaaaaaabbc"), true);
         assert_eq!(r.match_str("aaabc"), false);
     }
@@ -252,10 +260,13 @@ mod tests {
     }
 
     #[test]
-    fn brackets_curly_brackets() {
+    fn brackets_curly_brackets_simple() {
         let r = Regex::new("(a|b|c){4}");
-        assert_eq!(r.match_str("abca"), true);
-        assert_eq!(r.match_str("aadbc"), false);
+        for (index, node) in r.node_vec.iter().enumerate() {
+            println!("{} -- {:?}", index, node);
+        }
+        // assert_eq!(r.match_str("abca"), true);
+        // assert_eq!(r.match_str("aadbc"), false);
     }
 
     #[test]
@@ -340,15 +351,15 @@ mod tests {
         let string = "This is a group of words";
         let matches = r.match_indices(&string);
         println!("{:?}", matches);
-    } 
+    }
 
     #[test]
-    fn benchmark_but_only_run_once() {
+    fn benchmark_but_run_only_once() {
         let r = Regex::new(r"[\w\.+-]+@[\w\.-]+\.[\w\.-]+");
         let input = include_str!(r"../input_text.txt");
         let now = std::time::Instant::now();
         println!("{:?}", r.match_indices(input));
-        let elapsed: String = format!("{}",now.elapsed().as_millis());
+        let elapsed: String = format!("{}", now.elapsed().as_millis());
         let mut file = std::fs::File::create("./log.txt").unwrap();
         use std::io::Write;
         write!(file, "{}", elapsed).unwrap();
@@ -360,7 +371,7 @@ mod tests {
         b.iter(|| {
             assert_eq!(phone.match_str("+447777-666-555"), true);
             assert_eq!(phone.match_str("test@gmail.com"), false);
-        }); 
+        });
     }
 
     #[bench]
@@ -379,11 +390,29 @@ mod tests {
     }
 
     #[bench]
-    fn really_really_huge_bench(b: &mut Bencher) {
-        let r = Regex::new(r"[\w\.+-]+@[\w\.-]+\.[\w\.-]+");
+    fn email(b: &mut Bencher) {
+        let email = Regex::new(r"[\w\.+-]+@[\w\.-]+\.[\w\.-]+");
         let input = include_str!(r"../input_text.txt");
         b.iter(|| {
-            test::black_box(r.match_indices(input));
+            test::black_box(email.match_indices(input));
+        })
+    }
+
+    #[bench]
+    fn uri(b: &mut Bencher) {
+        let uri = Regex::new(r"[\w]+://[^/\s?#]+[^\s?#]+(?:\?[^\s#]*)?(?:#[^\s]*)?");
+        let input = include_str!(r"../input_text.txt");
+        b.iter(|| {
+            test::black_box(uri.match_indices(input));
+        })
+    }
+
+    #[bench]
+    fn ipv4(b: &mut Bencher) {
+        let ipv4 = Regex::new(r"(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9])");
+        let input = include_str!(r"../input_text.txt");
+        b.iter(|| {
+            test::black_box(ipv4.match_indices(input));
         })
     }
 
@@ -408,6 +437,7 @@ mod parallel_nfa;
 mod parse;
 pub mod regex;
 mod replace;
+mod root_node_optimizer;
 mod sorted_vec;
 mod unicode_ranges;
 mod utf_8;

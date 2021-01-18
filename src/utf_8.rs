@@ -148,13 +148,13 @@ impl CharLen for char {
     fn len(&self) -> usize {
         let b = *self as u32;
         if b <= 0x7F {
-            return 1
+            return 1;
         } else if b <= 0b110_11111 {
-            return 2
+            return 2;
         } else if b <= 0b1110_1111 {
-            return 3
+            return 3;
         } else {
-            return 4
+            return 4;
         };
     }
 }

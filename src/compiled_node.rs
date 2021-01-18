@@ -67,13 +67,13 @@ pub(crate) enum MatchNode {
 }
 
 #[derive(Clone, Debug)]
-pub enum One {
+pub(crate) enum One {
     MatchOne(char),
     NotMatchOne(char),
     MatchAll,
 }
 #[derive(Clone, Debug)]
-pub enum Range {
+pub(crate) enum Range {
     Inclusive(SortedVec<char>),
     Exclusive(SortedVec<char>),
     InclusiveRange(Vec<(char, char)>),
@@ -238,7 +238,7 @@ impl CompiledNode {
         }
 
         // println!("{:?}", cnodes);
-        println!("{:?}", flag);
+        // println!("{:?}", flag);
         (cnodes, start, flag)
     }
 }
@@ -277,18 +277,18 @@ pub trait Find<T> {
 
 impl Find<char> for Vec<(char, char)> {
     fn find(&self, target: &char) -> bool {
-        if *target < self.first().unwrap().0 || *target > self.last().unwrap().1 {
-            return false;
-        }
+        // if *target < self.first().unwrap().0 || *target > self.last().unwrap().1 {
+        //     return false;
+        // }
+        // return self.iter().find(|(start,end)| target >= start && target <= end).is_some();
 
         return self
-            .binary_search_by(|v| {
+            .binary_search_by(|(start, end)| {
                 use std::cmp::Ordering::*;
-                let (start, end) = v;
                 if target < start {
-                    return Less;
-                } else if target > end {
                     return Greater;
+                } else if target > end {
+                    return Less;
                 } else {
                     return Equal;
                 }

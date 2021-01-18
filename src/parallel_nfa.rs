@@ -1,18 +1,11 @@
 use crate::compiled_node::*;
 use crate::utf_8::*;
-use fnv::{FnvHashSet, FnvBuildHasher};
+use fnv::{FnvBuildHasher, FnvHashSet};
 use sorted_vec::*;
-use derivative::Derivative;
-use indexmap::IndexSet;
 use std::collections::BTreeSet;
-
-#[derive(Derivative)]
-#[derivative(Hash, PartialEq, PartialOrd, Eq, Ord)]
-pub struct NodeIndex(usize, #[derivative(Hash = "ignore", PartialEq = "ignore", PartialOrd = "ignore")] usize);
 
 // much quicker than std::collections::BTreeSet for some unknown reason
 type CustomHashSet = SortedSet<usize>;
-
 
 pub(crate) fn pure_match(nodes: &[CompiledNode], string_bytes: &[u8], start_node_index: usize) -> bool {
     // println!("Breadth First Search engine invoked");
@@ -58,8 +51,12 @@ pub(crate) fn pure_match(nodes: &[CompiledNode], string_bytes: &[u8], start_node
                         }
                         if success {
                             match &node.children {
-                                Children::Multiple(vec) => vec.iter().for_each(|v| {to_add_stack.insert(*v);}),
-                                Children::Single(s) => {to_add_stack.insert(*s);},
+                                Children::Multiple(vec) => vec.iter().for_each(|v| {
+                                    to_add_stack.insert(*v);
+                                }),
+                                Children::Single(s) => {
+                                    to_add_stack.insert(*s);
+                                }
                                 Children::None => panic!("Match node has no children"),
                             }
                         }
@@ -128,19 +125,25 @@ pub(crate) fn pure_match(nodes: &[CompiledNode], string_bytes: &[u8], start_node
                     }
                     if success {
                         match &node.children {
-                            Children::Multiple(vec) => vec.iter().for_each(|v| {current_stack.insert(*v);}),
-                            Children::Single(s) => {current_stack.insert(*s);},
+                            Children::Multiple(vec) => vec.iter().for_each(|v| {
+                                current_stack.insert(*v);
+                            }),
+                            Children::Single(s) => {
+                                current_stack.insert(*s);
+                            }
                             Children::None => panic!("Anchor node has no children"),
                         }
                     }
                 }
-                CNode::Behaviour(_) => {
-                    match &node.children {
-                        Children::Multiple(vec) => vec.iter().for_each(|v| {current_stack.insert(*v);}),
-                        Children::Single(s) => {current_stack.insert(*s);},
-                        Children::None => panic!("Behaviour node has no children"),
+                CNode::Behaviour(_) => match &node.children {
+                    Children::Multiple(vec) => vec.iter().for_each(|v| {
+                        current_stack.insert(*v);
+                    }),
+                    Children::Single(s) => {
+                        current_stack.insert(*s);
                     }
-                }
+                    Children::None => panic!("Behaviour node has no children"),
+                },
                 CNode::Special(_) => panic!("Special Nodes not supported on the BFS engine"),
                 CNode::End => return true,
             };
@@ -207,8 +210,12 @@ pub(crate) fn index_match(nodes: &[CompiledNode], string_bytes: &[u8], start_nod
                         }
                         if success {
                             match &node.children {
-                                Children::Multiple(vec) => vec.iter().for_each(|v| {to_add_stack.insert(*v);}),
-                                Children::Single(s) => {to_add_stack.insert(*s);},
+                                Children::Multiple(vec) => vec.iter().for_each(|v| {
+                                    to_add_stack.insert(*v);
+                                }),
+                                Children::Single(s) => {
+                                    to_add_stack.insert(*s);
+                                }
                                 Children::None => panic!("Match node has no children"),
                             }
                         }
@@ -277,19 +284,25 @@ pub(crate) fn index_match(nodes: &[CompiledNode], string_bytes: &[u8], start_nod
                     }
                     if success {
                         match &node.children {
-                            Children::Multiple(vec) => vec.iter().for_each(|v| {current_stack.insert(*v);}),
-                            Children::Single(s) => {current_stack.insert(*s);},
+                            Children::Multiple(vec) => vec.iter().for_each(|v| {
+                                current_stack.insert(*v);
+                            }),
+                            Children::Single(s) => {
+                                current_stack.insert(*s);
+                            }
                             Children::None => panic!("Anchor node has no children"),
                         }
                     }
                 }
-                CNode::Behaviour(_) => {
-                    match &node.children {
-                        Children::Multiple(vec) => vec.iter().for_each(|v| {current_stack.insert(*v);}),
-                        Children::Single(s) => {current_stack.insert(*s);},
-                        Children::None => panic!("Behaviour node has no children"),
+                CNode::Behaviour(_) => match &node.children {
+                    Children::Multiple(vec) => vec.iter().for_each(|v| {
+                        current_stack.insert(*v);
+                    }),
+                    Children::Single(s) => {
+                        current_stack.insert(*s);
                     }
-                }
+                    Children::None => panic!("Behaviour node has no children"),
+                },
                 CNode::Special(_) => panic!("Special Nodes not supported on the BFS engine"),
                 CNode::End => return Some((string_index, split_at)),
             };
@@ -357,8 +370,12 @@ pub(crate) fn indices_match(nodes: &[CompiledNode], string_bytes: &[u8], start_n
                         }
                         if success {
                             match &node.children {
-                                Children::Multiple(vec) => vec.iter().for_each(|v| {to_add_stack.insert(*v);}),
-                                Children::Single(s) => {to_add_stack.insert(*s);},
+                                Children::Multiple(vec) => vec.iter().for_each(|v| {
+                                    to_add_stack.insert(*v);
+                                }),
+                                Children::Single(s) => {
+                                    to_add_stack.insert(*s);
+                                }
                                 Children::None => panic!("Match node has no children"),
                             }
                         }
@@ -427,26 +444,32 @@ pub(crate) fn indices_match(nodes: &[CompiledNode], string_bytes: &[u8], start_n
                     }
                     if success {
                         match &node.children {
-                            Children::Multiple(vec) => vec.iter().for_each(|v| {current_stack.insert(*v);}),
-                            Children::Single(s) => {current_stack.insert(*s);},
+                            Children::Multiple(vec) => vec.iter().for_each(|v| {
+                                current_stack.insert(*v);
+                            }),
+                            Children::Single(s) => {
+                                current_stack.insert(*s);
+                            }
                             Children::None => panic!("Anchor node has no children"),
                         }
                     }
                 }
-                CNode::Behaviour(_) => {
-                    match &node.children {
-                        Children::Multiple(vec) => vec.iter().for_each(|v| {current_stack.insert(*v);}),
-                        Children::Single(s) => {current_stack.insert(*s);},
-                        Children::None => (),
+                CNode::Behaviour(_) => match &node.children {
+                    Children::Multiple(vec) => vec.iter().for_each(|v| {
+                        current_stack.insert(*v);
+                    }),
+                    Children::Single(s) => {
+                        current_stack.insert(*s);
                     }
-                }
+                    Children::None => (),
+                },
                 CNode::Special(_) => panic!("Special Nodes not supported on the BFS engine"),
                 CNode::End => {
                     output.push((string_index, split_at));
                     string_index = split_at;
                     to_add_stack.clear();
                     current_stack.clear();
-                },
+                }
             };
         }
         if to_add_stack.is_empty() {

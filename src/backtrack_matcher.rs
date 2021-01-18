@@ -6,18 +6,24 @@ use std::collections::VecDeque;
 //     children: Vec<Capture>,
 // }
 
-pub type CapturesMap = fxhash::FxHashMap::<u32, Vec<(usize, usize)>>;
+pub type CapturesMap = fxhash::FxHashMap<u32, Vec<(usize, usize)>>;
 
-use super::compiled_node::{CompiledNode, CNode::*, *};
+use super::compiled_node::{CNode::*, CompiledNode, *};
+use crate::root_node_optimizer::RootNode;
 
 use crate::utf_8::*;
 
-pub(crate) fn backtrack_match_indices(nodes: &[CompiledNode], string: &[u8], start_node: usize, callstack: &mut Vec<(usize, usize, usize)>) -> Vec<(usize, usize)> {
-
+pub(crate) fn backtrack_match_indices(
+    nodes: &[CompiledNode],
+    string: &[u8],
+    start_node: usize,
+    // Node index, string index, child
+    callstack: &mut Vec<(usize, usize, usize)>,
+    root_node: &Option<RootNode>,
+) -> Vec<(usize, usize)> {
     let mut node_index = start_node;
     let mut string_index = 0;
     let mut start_string_index = 0;
-    // Node index, string index, child
     let mut recursion_stack = Vec::new();
     let mut completed_recursion_stack = Vec::new();
     // String Index, Node Index
@@ -25,43 +31,41 @@ pub(crate) fn backtrack_match_indices(nodes: &[CompiledNode], string: &[u8], sta
 
     let mut out = Vec::new();
     'outer: loop {
-        let node = unsafe {nodes.get_unchecked(node_index)};
+        let node = unsafe { nodes.get_unchecked(node_index) };
         let string_data = decode_utf8(&string[string_index..]);
         match &node.node {
-            Match(match_node) => {
-                match string_data {
-                    Some((c, len)) => {
-                        if match_node.is_match(&c) {
-                            match &node.children {
-                                Children::Multiple(vec) => {
-                                    callstack.push((node_index, string_index + len, 1));
-                                    node_index = *unsafe{vec.get_unchecked(0)};
-                                },
-                                Children::Single(num) => {
-                                    node_index = *num;
-                                },
-                                Children::None => panic!("Match node has no children"), 
+            Match(match_node) => match string_data {
+                Some((c, len)) => {
+                    if match_node.is_match(&c) {
+                        match &node.children {
+                            Children::Multiple(vec) => {
+                                callstack.push((node_index, string_index + len, 1));
+                                node_index = *unsafe { vec.get_unchecked(0) };
                             }
-                            string_index += len;
-                            continue 'outer
+                            Children::Single(num) => {
+                                node_index = *num;
+                            }
+                            Children::None => panic!("Match node has no children"),
                         }
-                    },
-                    None => (),
+                        string_index += len;
+                        continue 'outer;
+                    }
                 }
-            }
+                None => (),
+            },
             Anchor(anchor_node) => {
                 if anchor_node.is_match(string_index, string, string_data) {
                     match &node.children {
                         Children::Multiple(vec) => {
                             callstack.push((node_index, string_index, 1));
-                            node_index = *unsafe{vec.get_unchecked(0)};
-                        },
+                            node_index = *unsafe { vec.get_unchecked(0) };
+                        }
                         Children::Single(num) => {
                             node_index = *num;
-                        },
-                        Children::None => panic!("Anchor node has no children"), 
+                        }
+                        Children::None => panic!("Anchor node has no children"),
                     }
-                    continue 'outer
+                    continue 'outer;
                 }
             }
             Special(special_node) => {
@@ -95,16 +99,16 @@ pub(crate) fn backtrack_match_indices(nodes: &[CompiledNode], string: &[u8], sta
                                 callstack.push((node_index, string_index, 1));
                                 // node_index = *unsafe{vec.get_unchecked(0)};
                                 node_index = *vec.get(0).unwrap();
-                            },
-                            _ => panic!("Lookaround nodes should be Children::Multiple")
+                            }
+                            _ => panic!("Lookaround nodes should be Children::Multiple"),
                         }
-                        continue 'outer
+                        continue 'outer;
                     }
                     EndNegativeLookAhead => {
                         let (_s, n) = lookahead_stack.pop().unwrap();
                         while let Some((node_idx, _str_idx, _child)) = callstack.pop() {
                             if node_idx == n {
-                                break
+                                break;
                             }
                         }
                     }
@@ -113,49 +117,47 @@ pub(crate) fn backtrack_match_indices(nodes: &[CompiledNode], string: &[u8], sta
                 match &node.children {
                     Children::Multiple(vec) => {
                         callstack.push((node_index, string_index, 1));
-                        node_index = *unsafe{vec.get_unchecked(0)};
-                    },
+                        node_index = *unsafe { vec.get_unchecked(0) };
+                    }
                     Children::Single(num) => {
                         node_index = *num;
-                    },
-                    Children::None => panic!("Behaviour node has no children"), 
+                    }
+                    Children::None => panic!("Behaviour node has no children"),
                 }
-                continue 'outer
-            },
+                continue 'outer;
+            }
             Behaviour(_) => {
                 match &node.children {
                     Children::Multiple(vec) => {
                         callstack.push((node_index, string_index, 1));
-                        node_index = *unsafe{vec.get_unchecked(0)};
-                    },
+                        node_index = *unsafe { vec.get_unchecked(0) };
+                    }
                     Children::Single(num) => {
                         node_index = *num;
-                    },
-                    Children::None => panic!("Behaviour node has no children"), 
+                    }
+                    Children::None => panic!("Behaviour node has no children"),
                 }
-                continue 'outer
+                continue 'outer;
             }
-            End => {
-                match recursion_stack.pop() {
-                    Some(n) => {
-                        completed_recursion_stack.push(n);
-                        callstack.push((node_index, string_index, 0));
-                        callstack.push((n, string_index, 0));
-                    }
-                    None => {
-                        out.push((start_string_index, string_index));
-                        start_string_index = string_index;
-                        callstack.clear();
-                    }
+            End => match recursion_stack.pop() {
+                Some(n) => {
+                    completed_recursion_stack.push(n);
+                    callstack.push((node_index, string_index, 0));
+                    callstack.push((n, string_index, 0));
+                }
+                None => {
+                    out.push((start_string_index, string_index));
+                    start_string_index = string_index;
+                    callstack.clear();
                 }
             },
         }
-        '_inner : loop {
+        '_inner: loop {
             // println!("Backtracking {:?}, {:?}", recurstion_stack, completed_recurstion_stack);
             match callstack.pop() {
                 Some((node_idx, string_idx, mut child)) => {
                     string_index = string_idx;
-                    let node = unsafe {nodes.get_unchecked(node_idx)};
+                    let node = unsafe { nodes.get_unchecked(node_idx) };
                     match &node.node {
                         End => {
                             recursion_stack.push(completed_recursion_stack.pop().unwrap());
@@ -176,12 +178,14 @@ pub(crate) fn backtrack_match_indices(nodes: &[CompiledNode], string: &[u8], sta
                                                     callstack.push((node_idx, string_idx, child));
                                                     // continue 'outer;
                                                 }
-                                                None => {lookahead_stack.pop();},
+                                                None => {
+                                                    lookahead_stack.pop();
+                                                }
                                             }
-                                        },
-                                        _ => panic!("Lookaround nodes should be Children::Multiple")
+                                        }
+                                        _ => panic!("Lookaround nodes should be Children::Multiple"),
                                     }
-                                    continue 'outer
+                                    continue 'outer;
                                 }
                                 StartNegativeLookAhead => {
                                     match &node.children {
@@ -196,46 +200,55 @@ pub(crate) fn backtrack_match_indices(nodes: &[CompiledNode], string: &[u8], sta
                                                 None => {
                                                     let popped = lookahead_stack.pop().unwrap();
                                                     callstack.push((node_idx + 1, popped.0, 0))
-                                                },
+                                                }
                                             }
-                                            continue 'outer
-                                        },
-                                        _ => panic!("Lookaround nodes should be Children::Multiple")
+                                            continue 'outer;
+                                        }
+                                        _ => panic!("Lookaround nodes should be Children::Multiple"),
                                     }
                                 }
                                 _ => (),
                             }
-                        },
+                        }
                         End => {
                             recursion_stack.push(completed_recursion_stack.pop().unwrap());
                         }
                         _ => (),
                     }
                     match &node.children {
-                        Children::Multiple(vec) => {
-                            match vec.get(child) {
-                                Some(new_child) => {
-                                    child += 1;
-                                    node_index = *new_child;
-                                    callstack.push((node_idx, string_idx, child));
-                                    continue 'outer;
-                                }
-                                None => (),
+                        Children::Multiple(vec) => match vec.get(child) {
+                            Some(new_child) => {
+                                child += 1;
+                                node_index = *new_child;
+                                callstack.push((node_idx, string_idx, child));
+                                continue 'outer;
                             }
+                            None => (),
                         },
                         Children::Single(c) => {
                             node_index = *c;
                             continue 'outer;
                         }
-                        _ => ()
+                        _ => (),
                     }
-                },
+                }
                 None => {
+                    start_string_index = next_utf8(string, start_string_index);
+                    if let Some(root_node) = root_node {
+                        match root_node.run(string, start_string_index) {
+                            Some(idx) => {
+                                node_index = root_node.child;
+                                start_string_index = idx;
+                                string_index = idx;
+                                continue 'outer;
+                            }
+                            None => return out,
+                        }
+                    } else 
                     if start_string_index < string.len() {
-                        start_string_index = next_utf8(string, start_string_index);
                         string_index = start_string_index;
                         node_index = start_node;
-                        continue 'outer
+                        continue 'outer;
                     } else {
                         return out;
                     }
@@ -245,8 +258,13 @@ pub(crate) fn backtrack_match_indices(nodes: &[CompiledNode], string: &[u8], sta
     }
 }
 
-pub(crate) fn backtrack_first_match(nodes: &[CompiledNode], string: &[u8], start_node: usize, callstack: &mut Vec<(usize, usize, usize)>) -> Option<(usize, usize)> {
-
+pub(crate) fn backtrack_first_match(
+    nodes: &[CompiledNode],
+    string: &[u8],
+    start_node: usize,
+    callstack: &mut Vec<(usize, usize, usize)>,
+    root_node: &Option<RootNode>,
+) -> Option<(usize, usize)> {
     let mut node_index = start_node;
     let mut string_index = 0;
     let mut start_string_index = 0;
@@ -257,43 +275,41 @@ pub(crate) fn backtrack_first_match(nodes: &[CompiledNode], string: &[u8], start
     let mut lookahead_stack = Vec::<(usize, usize)>::new();
 
     'outer: loop {
-        let node = unsafe {nodes.get_unchecked(node_index)};
+        let node = unsafe { nodes.get_unchecked(node_index) };
         let string_data = decode_utf8(&string[string_index..]);
         match &node.node {
-            Match(match_node) => {
-                match string_data {
-                    Some((c, len)) => {
-                        if match_node.is_match(&c) {
-                            match &node.children {
-                                Children::Multiple(vec) => {
-                                    callstack.push((node_index, string_index + len, 1));
-                                    node_index = *unsafe{vec.get_unchecked(0)};
-                                },
-                                Children::Single(num) => {
-                                    node_index = *num;
-                                },
-                                Children::None => panic!("Match node has no children"), 
+            Match(match_node) => match string_data {
+                Some((c, len)) => {
+                    if match_node.is_match(&c) {
+                        match &node.children {
+                            Children::Multiple(vec) => {
+                                callstack.push((node_index, string_index + len, 1));
+                                node_index = *unsafe { vec.get_unchecked(0) };
                             }
-                            string_index += len;
-                            continue 'outer
+                            Children::Single(num) => {
+                                node_index = *num;
+                            }
+                            Children::None => panic!("Match node has no children"),
                         }
-                    },
-                    None => (),
+                        string_index += len;
+                        continue 'outer;
+                    }
                 }
-            }
+                None => (),
+            },
             Anchor(anchor_node) => {
                 if anchor_node.is_match(string_index, string, string_data) {
                     match &node.children {
                         Children::Multiple(vec) => {
                             callstack.push((node_index, string_index, 1));
-                            node_index = *unsafe{vec.get_unchecked(0)};
-                        },
+                            node_index = *unsafe { vec.get_unchecked(0) };
+                        }
                         Children::Single(num) => {
                             node_index = *num;
-                        },
-                        Children::None => panic!("Anchor node has no children"), 
+                        }
+                        Children::None => panic!("Anchor node has no children"),
                     }
-                    continue 'outer
+                    continue 'outer;
                 }
             }
             Special(special_node) => {
@@ -327,16 +343,16 @@ pub(crate) fn backtrack_first_match(nodes: &[CompiledNode], string: &[u8], start
                                 callstack.push((node_index, string_index, 1));
                                 // node_index = *unsafe{vec.get_unchecked(0)};
                                 node_index = *vec.get(0).unwrap();
-                            },
-                            _ => panic!("Lookaround nodes should be Children::Multiple")
+                            }
+                            _ => panic!("Lookaround nodes should be Children::Multiple"),
                         }
-                        continue 'outer
+                        continue 'outer;
                     }
                     EndNegativeLookAhead => {
                         let (_s, n) = lookahead_stack.pop().unwrap();
                         while let Some((node_idx, _str_idx, _child)) = callstack.pop() {
                             if node_idx == n {
-                                break
+                                break;
                             }
                         }
                     }
@@ -345,48 +361,46 @@ pub(crate) fn backtrack_first_match(nodes: &[CompiledNode], string: &[u8], start
                 match &node.children {
                     Children::Multiple(vec) => {
                         callstack.push((node_index, string_index, 1));
-                        node_index = *unsafe{vec.get_unchecked(0)};
-                    },
+                        node_index = *unsafe { vec.get_unchecked(0) };
+                    }
                     Children::Single(num) => {
                         node_index = *num;
-                    },
-                    Children::None => panic!("Behaviour node has no children"), 
+                    }
+                    Children::None => panic!("Behaviour node has no children"),
                 }
-                continue 'outer
-            },
+                continue 'outer;
+            }
             Behaviour(_) => {
                 match &node.children {
                     Children::Multiple(vec) => {
                         callstack.push((node_index, string_index, 1));
-                        node_index = *unsafe{vec.get_unchecked(0)};
-                    },
+                        node_index = *unsafe { vec.get_unchecked(0) };
+                    }
                     Children::Single(num) => {
                         node_index = *num;
-                    },
-                    Children::None => panic!("Behaviour node has no children"), 
+                    }
+                    Children::None => panic!("Behaviour node has no children"),
                 }
-                continue 'outer
+                continue 'outer;
             }
-            End => {
-                match recursion_stack.pop() {
-                    Some(n) => {
-                        completed_recursion_stack.push(n);
-                        callstack.push((node_index, string_index, 0));
-                        callstack.push((n, string_index, 0));
-                    }
-                    None => {
-                        callstack.clear();
-                        return Some((start_string_index, string_index));
-                    }
+            End => match recursion_stack.pop() {
+                Some(n) => {
+                    completed_recursion_stack.push(n);
+                    callstack.push((node_index, string_index, 0));
+                    callstack.push((n, string_index, 0));
+                }
+                None => {
+                    callstack.clear();
+                    return Some((start_string_index, string_index));
                 }
             },
         }
-        '_inner : loop {
+        '_inner: loop {
             // println!("Backtracking {:?}, {:?}", recurstion_stack, completed_recurstion_stack);
             match callstack.pop() {
                 Some((node_idx, string_idx, mut child)) => {
                     string_index = string_idx;
-                    let node = unsafe {nodes.get_unchecked(node_idx)};
+                    let node = unsafe { nodes.get_unchecked(node_idx) };
                     match &node.node {
                         End => {
                             recursion_stack.push(completed_recursion_stack.pop().unwrap());
@@ -407,12 +421,14 @@ pub(crate) fn backtrack_first_match(nodes: &[CompiledNode], string: &[u8], start
                                                     callstack.push((node_idx, string_idx, child));
                                                     // continue 'outer;
                                                 }
-                                                None => {lookahead_stack.pop();},
+                                                None => {
+                                                    lookahead_stack.pop();
+                                                }
                                             }
-                                        },
-                                        _ => panic!("Lookaround nodes should be Children::Multiple")
+                                        }
+                                        _ => panic!("Lookaround nodes should be Children::Multiple"),
                                     }
-                                    continue 'outer
+                                    continue 'outer;
                                 }
                                 StartNegativeLookAhead => {
                                     match &node.children {
@@ -427,46 +443,54 @@ pub(crate) fn backtrack_first_match(nodes: &[CompiledNode], string: &[u8], start
                                                 None => {
                                                     let popped = lookahead_stack.pop().unwrap();
                                                     callstack.push((node_idx + 1, popped.0, 0))
-                                                },
+                                                }
                                             }
-                                            continue 'outer
-                                        },
-                                        _ => panic!("Lookaround nodes should be Children::Multiple")
+                                            continue 'outer;
+                                        }
+                                        _ => panic!("Lookaround nodes should be Children::Multiple"),
                                     }
                                 }
                                 _ => (),
                             }
-                        },
+                        }
                         End => {
                             recursion_stack.push(completed_recursion_stack.pop().unwrap());
                         }
                         _ => (),
                     }
                     match &node.children {
-                        Children::Multiple(vec) => {
-                            match vec.get(child) {
-                                Some(new_child) => {
-                                    child += 1;
-                                    node_index = *new_child;
-                                    callstack.push((node_idx, string_idx, child));
-                                    continue 'outer;
-                                }
-                                None => (),
+                        Children::Multiple(vec) => match vec.get(child) {
+                            Some(new_child) => {
+                                child += 1;
+                                node_index = *new_child;
+                                callstack.push((node_idx, string_idx, child));
+                                continue 'outer;
                             }
+                            None => (),
                         },
                         Children::Single(c) => {
                             node_index = *c;
                             continue 'outer;
                         }
-                        _ => ()
+                        _ => (),
                     }
-                },
+                }
                 None => {
-                    if start_string_index < string.len() {
-                        start_string_index = next_utf8(string, start_string_index);
+                    start_string_index = next_utf8(string, start_string_index);
+                    if let Some(root_node) = root_node {
+                        match root_node.run(string, start_string_index) {
+                            Some(idx) => {
+                                node_index = root_node.child;
+                                start_string_index = idx;
+                                string_index = idx;
+                                continue 'outer;
+                            }
+                            None => return None,
+                        }
+                    } else if start_string_index < string.len() {
                         string_index = start_string_index;
                         node_index = start_node;
-                        continue 'outer
+                        continue 'outer;
                     } else {
                         return None;
                     }
@@ -476,9 +500,13 @@ pub(crate) fn backtrack_first_match(nodes: &[CompiledNode], string: &[u8], start
     }
 }
 
-
-pub(crate) fn backtrack_pure_match(nodes: &[CompiledNode], string: &[u8], start_node: usize, callstack: &mut Vec<(usize, usize, usize)>) -> bool {
-
+pub(crate) fn backtrack_pure_match(
+    nodes: &[CompiledNode],
+    string: &[u8],
+    start_node: usize,
+    callstack: &mut Vec<(usize, usize, usize)>,
+    root_node: &Option<RootNode>,
+) -> bool {
     let mut node_index = start_node;
     let mut string_index = 0;
     let mut start_string_index = 0;
@@ -489,43 +517,41 @@ pub(crate) fn backtrack_pure_match(nodes: &[CompiledNode], string: &[u8], start_
     let mut lookahead_stack = Vec::<(usize, usize)>::new();
 
     'outer: loop {
-        let node = unsafe {nodes.get_unchecked(node_index)};
+        let node = unsafe { nodes.get_unchecked(node_index) };
         let string_data = decode_utf8(&string[string_index..]);
         match &node.node {
-            Match(match_node) => {
-                match string_data {
-                    Some((c, len)) => {
-                        if match_node.is_match(&c) {
-                            match &node.children {
-                                Children::Multiple(vec) => {
-                                    callstack.push((node_index, string_index + len, 1));
-                                    node_index = *unsafe{vec.get_unchecked(0)};
-                                },
-                                Children::Single(num) => {
-                                    node_index = *num;
-                                },
-                                Children::None => panic!("Match node has no children"), 
+            Match(match_node) => match string_data {
+                Some((c, len)) => {
+                    if match_node.is_match(&c) {
+                        match &node.children {
+                            Children::Multiple(vec) => {
+                                callstack.push((node_index, string_index + len, 1));
+                                node_index = *unsafe { vec.get_unchecked(0) };
                             }
-                            string_index += len;
-                            continue 'outer
+                            Children::Single(num) => {
+                                node_index = *num;
+                            }
+                            Children::None => panic!("Match node has no children"),
                         }
-                    },
-                    None => (),
+                        string_index += len;
+                        continue 'outer;
+                    }
                 }
-            }
+                None => (),
+            },
             Anchor(anchor_node) => {
                 if anchor_node.is_match(string_index, string, string_data) {
                     match &node.children {
                         Children::Multiple(vec) => {
                             callstack.push((node_index, string_index, 1));
-                            node_index = *unsafe{vec.get_unchecked(0)};
-                        },
+                            node_index = *unsafe { vec.get_unchecked(0) };
+                        }
                         Children::Single(num) => {
                             node_index = *num;
-                        },
-                        Children::None => panic!("Anchor node has no children"), 
+                        }
+                        Children::None => panic!("Anchor node has no children"),
                     }
-                    continue 'outer
+                    continue 'outer;
                 }
             }
             Special(special_node) => {
@@ -559,16 +585,16 @@ pub(crate) fn backtrack_pure_match(nodes: &[CompiledNode], string: &[u8], start_
                                 callstack.push((node_index, string_index, 1));
                                 // node_index = *unsafe{vec.get_unchecked(0)};
                                 node_index = *vec.get(0).unwrap();
-                            },
-                            _ => panic!("Lookaround nodes should be Children::Multiple")
+                            }
+                            _ => panic!("Lookaround nodes should be Children::Multiple"),
                         }
-                        continue 'outer
+                        continue 'outer;
                     }
                     EndNegativeLookAhead => {
                         let (_s, n) = lookahead_stack.pop().unwrap();
                         while let Some((node_idx, _str_idx, _child)) = callstack.pop() {
                             if node_idx == n {
-                                break
+                                break;
                             }
                         }
                     }
@@ -577,48 +603,46 @@ pub(crate) fn backtrack_pure_match(nodes: &[CompiledNode], string: &[u8], start_
                 match &node.children {
                     Children::Multiple(vec) => {
                         callstack.push((node_index, string_index, 1));
-                        node_index = *unsafe{vec.get_unchecked(0)};
-                    },
+                        node_index = *unsafe { vec.get_unchecked(0) };
+                    }
                     Children::Single(num) => {
                         node_index = *num;
-                    },
-                    Children::None => panic!("Behaviour node has no children"), 
+                    }
+                    Children::None => panic!("Behaviour node has no children"),
                 }
-                continue 'outer
-            },
+                continue 'outer;
+            }
             Behaviour(_) => {
                 match &node.children {
                     Children::Multiple(vec) => {
                         callstack.push((node_index, string_index, 1));
-                        node_index = *unsafe{vec.get_unchecked(0)};
-                    },
+                        node_index = *unsafe { vec.get_unchecked(0) };
+                    }
                     Children::Single(num) => {
                         node_index = *num;
-                    },
-                    Children::None => panic!("Behaviour node has no children"), 
+                    }
+                    Children::None => panic!("Behaviour node has no children"),
                 }
-                continue 'outer
+                continue 'outer;
             }
-            End => {
-                match recursion_stack.pop() {
-                    Some(n) => {
-                        completed_recursion_stack.push(n);
-                        callstack.push((node_index, string_index, 0));
-                        callstack.push((n, string_index, 0));
-                    }
-                    None => {
-                        callstack.clear();
-                        return true
-                    }
+            End => match recursion_stack.pop() {
+                Some(n) => {
+                    completed_recursion_stack.push(n);
+                    callstack.push((node_index, string_index, 0));
+                    callstack.push((n, string_index, 0));
+                }
+                None => {
+                    callstack.clear();
+                    return true;
                 }
             },
         }
-        '_inner : loop {
+        '_inner: loop {
             // println!("Backtracking {:?}, {:?}", recurstion_stack, completed_recurstion_stack);
             match callstack.pop() {
                 Some((node_idx, string_idx, mut child)) => {
                     string_index = string_idx;
-                    let node = unsafe {nodes.get_unchecked(node_idx)};
+                    let node = unsafe { nodes.get_unchecked(node_idx) };
                     match &node.node {
                         End => {
                             recursion_stack.push(completed_recursion_stack.pop().unwrap());
@@ -639,12 +663,14 @@ pub(crate) fn backtrack_pure_match(nodes: &[CompiledNode], string: &[u8], start_
                                                     callstack.push((node_idx, string_idx, child));
                                                     // continue 'outer;
                                                 }
-                                                None => {lookahead_stack.pop();},
+                                                None => {
+                                                    lookahead_stack.pop();
+                                                }
                                             }
-                                        },
-                                        _ => panic!("Lookaround nodes should be Children::Multiple")
+                                        }
+                                        _ => panic!("Lookaround nodes should be Children::Multiple"),
                                     }
-                                    continue 'outer
+                                    continue 'outer;
                                 }
                                 StartNegativeLookAhead => {
                                     match &node.children {
@@ -659,46 +685,55 @@ pub(crate) fn backtrack_pure_match(nodes: &[CompiledNode], string: &[u8], start_
                                                 None => {
                                                     let popped = lookahead_stack.pop().unwrap();
                                                     callstack.push((node_idx + 1, popped.0, 0))
-                                                },
+                                                }
                                             }
-                                            continue 'outer
-                                        },
-                                        _ => panic!("Lookaround nodes should be Children::Multiple")
+                                            continue 'outer;
+                                        }
+                                        _ => panic!("Lookaround nodes should be Children::Multiple"),
                                     }
                                 }
                                 _ => (),
                             }
-                        },
+                        }
                         End => {
                             recursion_stack.push(completed_recursion_stack.pop().unwrap());
                         }
                         _ => (),
                     }
                     match &node.children {
-                        Children::Multiple(vec) => {
-                            match vec.get(child) {
-                                Some(new_child) => {
-                                    child += 1;
-                                    node_index = *new_child;
-                                    callstack.push((node_idx, string_idx, child));
-                                    continue 'outer;
-                                }
-                                None => (),
+                        Children::Multiple(vec) => match vec.get(child) {
+                            Some(new_child) => {
+                                child += 1;
+                                node_index = *new_child;
+                                callstack.push((node_idx, string_idx, child));
+                                continue 'outer;
                             }
+                            None => (),
                         },
                         Children::Single(c) => {
                             node_index = *c;
                             continue 'outer;
                         }
-                        _ => ()
+                        _ => (),
                     }
-                },
+                }
                 None => {
+                    start_string_index = next_utf8(string, start_string_index);
+                    if let Some(root_node) = root_node {
+                        match root_node.run(string, start_string_index) {
+                            Some(idx) => {
+                                node_index = root_node.child;
+                                start_string_index = idx;
+                                string_index = idx;
+                                continue 'outer;
+                            }
+                            None => return false,
+                        }
+                    } else 
                     if start_string_index < string.len() {
-                        start_string_index = next_utf8(string, start_string_index);
                         string_index = start_string_index;
                         node_index = start_node;
-                        continue 'outer
+                        continue 'outer;
                     } else {
                         return false;
                     }
