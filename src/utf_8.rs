@@ -22,6 +22,8 @@ const TAG_FOUR: u8 = 0b1111_0000;
 
 /// Returns the smallest possible index of the next valid UTF-8 sequence
 /// starting after `i`.
+
+#[inline(always)]
 pub fn next_utf8(text: &[u8], i: usize) -> usize {
     let b = match text.get(i) {
         None => return i + 1,
@@ -49,7 +51,7 @@ pub fn next_utf8(text: &[u8], i: usize) -> usize {
 /// Note that a UTF-8 sequence is invalid if it is incorrect UTF-8, encodes a
 /// codepoint that is out of range (surrogate codepoints are out of range) or
 /// is not the shortest possible UTF-8 sequence for that codepoint.
-#[inline]
+#[inline(always)]
 pub fn decode_utf8(src: &[u8]) -> Option<(char, usize)> {
     let b0 = match src.get(0) {
         None => return None,
@@ -115,6 +117,7 @@ pub fn decode_utf8(src: &[u8]) -> Option<(char, usize)> {
 
 /// Like `decode_utf8`, but decodes the last UTF-8 sequence in `src` instead
 /// of the first.
+#[inline(always)]
 pub fn decode_last_utf8(src: &[u8]) -> Option<(char, usize)> {
     if src.is_empty() {
         return None;
@@ -148,13 +151,13 @@ impl CharLen for char {
     fn len(&self) -> usize {
         let b = *self as u32;
         if b <= 0x7F {
-            return 1;
+            return 1
         } else if b <= 0b110_11111 {
-            return 2;
+            return 2
         } else if b <= 0b1110_1111 {
-            return 3;
+            return 3
         } else {
-            return 4;
+            return 4
         };
     }
 }

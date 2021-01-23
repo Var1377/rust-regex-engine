@@ -1,10 +1,12 @@
 // #![allow(dead_code, unused_mut, unused_imports, unused_variables, unreachable_patterns)]
-#![allow(dead_code, unused_imports, unreachable_patterns)]
+#![allow(dead_code, unused_imports, unreachable_patterns, unused_variables)]
 #![feature(test, assoc_char_funcs)]
 
 extern crate fnv;
 extern crate fxhash;
 extern crate test;
+#[macro_use]
+extern crate educe;
 
 #[cfg(test)]
 mod tests {
@@ -19,12 +21,22 @@ mod tests {
         }
     }
 
+    fn test_bench(function: fn() -> ()) {
+        let now = std::time::Instant::now();
+        function();
+        let elapsed = now.elapsed().as_millis().to_string();
+        let mut file = std::fs::File::create("./log.txt").unwrap();
+        use std::io::Write;
+        write!(file, "{}", elapsed).unwrap();
+    }
+
     #[test]
     fn compile_test() {
-        let _r = Regex::new(r"(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9])");
+        let _r = Regex::new(r"[\w]+://[^/\s?#]+[^\s?#]+(?:\?[^\s#]*)?(?:#[^\s]*)?");
         // let _r = Regex::new(r"[\w\.+-]+@[\w\.-]+\.[\w\.-]+");
         // println!("{:?}", _r);
-        println!("{:?}", _r.optimized_root_node);
+        // println!("{:?}", _r.optimized_root_node);
+        debug_print(&_r);
     }
 
     #[test]
@@ -76,6 +88,7 @@ mod tests {
     fn add_and_star_with_brackets() {
         let r = Regex::new("(a|b|c)*d(e|f|g)+h");
         // println!("{:?}", r.node_vec);
+        // debug_print(&r);
         assert_eq!(r.match_str("adgh"), true);
         assert_eq!(r.match_str("aaaaaadh"), false);
         assert_eq!(r.match_str("abcabcabacbacdfh"), true);
@@ -96,9 +109,10 @@ mod tests {
     }
 
     #[test]
-    fn square_brackets() {
+    fn square_brackets_simple() {
         let r = Regex::new("abc[def]ghi");
         // println!("{:?}", r.node_vec);
+        // debug_print(&r);
         assert_eq!(r.match_str("abcdghi"), true);
         assert_eq!(r.match_str("abceghi"), true);
         assert_eq!(r.match_str("abcfghi"), true);
@@ -194,6 +208,7 @@ mod tests {
     #[test]
     fn question_mark_with_brackets() {
         let r = Regex::new("abc(d|e|f)?hij");
+        debug_print(&r);
         assert_eq!(r.match_str("abcdhij"), true);
         assert_eq!(r.match_str("abcehij"), true);
         assert_eq!(r.match_str("abcfhij"), true);
@@ -255,6 +270,7 @@ mod tests {
     fn single_character_curly_brackets_both() {
         let r = Regex::new("^a{4,6}b{2,4}c$");
         // println!("{:?}", r.node_vec);
+        debug_print(&r);
         assert_eq!(r.match_str("aaaabbc"), true);
         assert_eq!(r.match_str("abbbc"), false);
     }
@@ -270,16 +286,19 @@ mod tests {
     }
 
     #[test]
-    fn brackets_curly_brackets_comma() {
+    fn brackets_curly_brackets_comma_simple() {
         let r = Regex::new("(a|b|c){4,}");
+        // debug_print(&r);
         assert_eq!(r.match_str("abaaaaaaaaaaaaaacaad"), true);
         assert_eq!(r.match_str("aadbc"), false);
     }
 
     #[test]
     fn brackets_curly_brackets_both() {
-        let r = Regex::new("^(a|b|c){4,6}$");
+        let r = Regex::new("^(a|b|c){4,5}$");
+        // debug_print(&r);
         assert_eq!(r.match_str("abcb"), true);
+        assert_eq!(r.match_str("abcba"), true);
         assert_eq!(r.match_str("aab"), false);
     }
 
@@ -300,11 +319,12 @@ mod tests {
     #[test]
     fn escaped_character_curly_brackets() {
         let r = Regex::new(r"\w{4,6}");
+        // debug_print(&r);
         assert_eq!(r.match_str("abdc"), true);
     }
 
     #[test]
-    fn lookahead() {
+    fn positive_lookahead() {
         let r = Regex::new("^abc(?=def)d");
         assert_eq!(r.match_str("abcdef"), true);
         assert_eq!(r.match_str("abcdeg"), false);
@@ -322,10 +342,19 @@ mod tests {
 
     #[test]
     fn atomic_groups() {
-        let r = Regex::new("a+(?>b)a");
-        println!("{:?}", r.node_vec);
-        assert_eq!(r.match_str("aaaaaaaba"), true);
-        assert_eq!(r.match_str("aaaaaaabb"), false);
+        let r = Regex::new("a(?>bc|b)c");
+        // println!("{:?}", r.node_vec);
+        debug_print(&r);
+        assert_eq!(r.match_str("abcc"), true);
+        assert_eq!(r.match_str("abc"), false);
+    }
+
+    #[test]
+    fn possessive() {
+        let r = Regex::new(r#"".*+""#);
+        assert!(!r.is_match(r#""abc"x"#));
+        let r = Regex::new(r#"".*""#);
+        assert!(r.is_match(r#""abc"x"#));
     }
 
     #[test]
@@ -333,6 +362,10 @@ mod tests {
         let r = Regex::new("[ab]+?(?>b)c");
         assert_eq!(r.match_str("aba"), false);
         assert_eq!(r.match_str("aabc"), true);
+        let r = Regex::new(r"\w+?a");
+        assert_eq!((0,3), r.match_indices("wwawwwwwwwwwwa")[0]);
+        let r = Regex::new(r"\w+a");
+        assert_eq!(vec![(0,14)], r.match_indices("wwawwwwwwwwwwa"));
     }
 
     #[test]
@@ -349,8 +382,15 @@ mod tests {
     fn boundary() {
         let r = Regex::new(r"\b\w+\b");
         let string = "This is a group of words";
+        // println!("{}", string.len());
+        // debug_print(&r);
         let matches = r.match_indices(&string);
-        println!("{:?}", matches);
+        // println!("{:?}", matches);
+    }
+
+    #[test]
+    fn possessive_curly_brackets() {
+        let r = Regex::new(r"a{2,}+b");
     }
 
     #[test]
@@ -389,8 +429,8 @@ mod tests {
         });
     }
 
-    #[bench]
-    fn email(b: &mut Bencher) {
+    // #[bench]
+    fn email_bench(b: &mut Bencher) {
         let email = Regex::new(r"[\w\.+-]+@[\w\.-]+\.[\w\.-]+");
         let input = include_str!(r"../input_text.txt");
         b.iter(|| {
@@ -398,8 +438,21 @@ mod tests {
         })
     }
 
-    #[bench]
-    fn uri(b: &mut Bencher) {
+    // #[test]
+    fn email_test() {
+        test_bench(|| {let email = Regex::new(r"[\w\.+-]+@[\w\.-]+\.[\w\.-]+");
+        let input = include_str!(r"../input_text.txt");
+        email.match_indices(input);})
+    }
+    // #[test]
+    // fn email_test2() {
+    //     let email = Regex::new(r"[\w\.+-]+@[\w\.-]+\.[\w\.-]+");
+    //     let input = include_str!(r"../input_text.txt");
+    //     email.is_match(input);
+    // }
+
+    // #[bench]
+    fn uri_bench(b: &mut Bencher) {
         let uri = Regex::new(r"[\w]+://[^/\s?#]+[^\s?#]+(?:\?[^\s#]*)?(?:#[^\s]*)?");
         let input = include_str!(r"../input_text.txt");
         b.iter(|| {
@@ -407,13 +460,28 @@ mod tests {
         })
     }
 
-    #[bench]
-    fn ipv4(b: &mut Bencher) {
+    // #[test]
+    fn uri_test() {
+        test_bench(|| {
+            let uri = Regex::new(r"[\w]+://[^/\s?#]+[^\s?#]+(?:\?[^\s#]*)?(?:#[^\s]*)?");
+        let input = include_str!(r"../input_text.txt");
+        test::black_box(uri.match_indices(input));});
+    }
+
+    // #[bench]
+    fn ipv4_bench(b: &mut Bencher) {
         let ipv4 = Regex::new(r"(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9])");
         let input = include_str!(r"../input_text.txt");
         b.iter(|| {
             test::black_box(ipv4.match_indices(input));
         })
+    }
+
+    // #[test]
+    fn ipv4_test() {
+        test_bench(|| {let ipv4 = Regex::new(r"(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9])");
+        let input = include_str!(r"../input_text.txt");
+        test::black_box(ipv4.match_indices(input));});
     }
 
     // // #[bench]
@@ -428,6 +496,7 @@ mod tests {
 mod backtrack_matcher;
 mod compiled_node;
 pub mod config;
+#[macro_use]
 mod constants;
 mod dfa_matcher;
 mod matcher;

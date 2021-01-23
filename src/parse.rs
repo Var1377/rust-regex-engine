@@ -8,6 +8,25 @@ enum ParseMode {
     Comment,
 }
 
+#[derive(Copy, Clone, Debug,)]
+pub enum ParseToken {
+    S(usize),
+    M {
+        first: usize, before: usize, after: usize, last: usize, to_link: usize,
+    },
+}
+
+impl ParseToken {
+    pub fn idx(&self) -> usize {
+        *match self {
+            S(n) => n,
+            M{to_link, ..} => to_link
+        }
+    }
+}
+
+use ParseToken::*;
+
 impl Regex {
     pub(crate) fn parse_expression(&mut self) {
         let mut nodes = parse(str_to_char_vec(&self.expr));
@@ -24,9 +43,9 @@ impl Regex {
 }
 
 fn parse(mut string: Vec<char>) -> Vec<Node> {
-    let mut _node_vec = vec![Node::Transition { children: vec![] }, Node::End];
+    let mut _node_vec = vec![Node::new_transition(), Node::End];
     let ref mut node_vec = _node_vec;
-    let mut callstack = vec![0, 0];
+    let mut callstack = vec![S(0), S(0)];
     let mut upcoming_transition_stack = vec![1];
     let mut state_stack = vec![ParseMode::Normal];
     let mut string_index = 0;
@@ -34,7 +53,7 @@ fn parse(mut string: Vec<char>) -> Vec<Node> {
     let mut comment_mode = false;
     // let mut looking_back = false;
     let mut current_cap_group = 1;
-    let mut closing_bracket = false;
+    // let mut closing_bracket = false;
     while string_index < string.len() {
         // println!("{:?}", node_vec);
         let character = string[string_index];
@@ -57,21 +76,18 @@ fn parse(mut string: Vec<char>) -> Vec<Node> {
                                     parse_rest = true;
                                 }
                                 'R' => {
-                                    let before = Node::new_transition();
-                                    // let before_index = node_vec.len();
-                                    let after = Node::new_transition();
-                                    add_node(before, node_vec, &mut callstack);
-                                    let after_index = node_vec.len();
-                                    node_vec.push(after);
-                                    add_node(Node::GlobalRecursion, node_vec, &mut callstack);
-                                    callstack.pop();
-                                    callstack.push(after_index);
+                                    let len = node_vec.len();
+                                    let v = vec![Node::Transition {children: vec![len + 1]}, Node::Transition {children: vec![len + 2]}, Node::GlobalRecursion, Node::Transition {children: vec![len + 4]}, Node::Transition {children: vec![]}];
+                                    let last_index = len + 4;
+                                    node_vec.extend(v);
+                                    node_vec.get_mut(callstack.pop().unwrap().idx()).unwrap().push_child(len);
+                                    callstack.push(M{first: len, before: len + 1, after: len + 3, last: len + 4, to_link: len + 4});
                                     string_index += 2;
-                                    closing_bracket = true;
                                     continue;
                                 }
                                 '>' => {
-                                    after = Node::DropStack { children: vec![] };
+                                    before = Node::StartAtomic{children: vec![]};
+                                    after = Node::EndAtomic { children: vec![] };
                                     parse_rest = true;
                                 }
                                 'i' => {
@@ -109,15 +125,14 @@ fn parse(mut string: Vec<char>) -> Vec<Node> {
                             parse_rest = true;
                         }
                         if parse_rest {
-                            node_vec.push(before);
-                            let after_index: usize = node_vec.len();
-                            node_vec.push(after);
-                            upcoming_transition_stack.push(after_index);
-                            let old = callstack.pop().unwrap();
-                            let to_connect = node_vec.get_mut(old).unwrap();
-                            to_connect.push_child(before_index);
-                            callstack.push(before_index);
-                            callstack.push(*callstack.last().unwrap());
+                            let len = node_vec.len();
+                            after.push_child(len + 3);
+                            let v = vec![Node::Transition {children: vec![len + 1]}, before, after, Node::new_transition()];
+                            node_vec.get_mut(callstack.pop().unwrap().idx()).unwrap().push_child(len);
+                            node_vec.extend(v);
+                            callstack.push(S(len + 1));
+                            callstack.push(S(len + 1));
+                            upcoming_transition_stack.push(len + 2);
                         } else if remove_brackets {
                             string.remove(string_index - 2);
                             string.remove(string_index - 2);
@@ -126,15 +141,16 @@ fn parse(mut string: Vec<char>) -> Vec<Node> {
                         }
                     }
                     ')' => {
-                        let after_index = upcoming_transition_stack.last().unwrap();
-                        let current_last_node_index = callstack.pop().unwrap();
-                        let current_node = node_vec.get_mut(current_last_node_index).unwrap();
-                        current_node.push_child(*after_index);
-                        let to_connect = upcoming_transition_stack.pop().unwrap();
-                        callstack.push(to_connect);
-                        closing_bracket = true;
-                        string_index += 1;
-                        continue;
+                        let after_index = upcoming_transition_stack.pop().unwrap();
+                        let current_last_node_index = callstack.pop().unwrap().idx();
+                        node_vec.get_mut(current_last_node_index).unwrap().push_child(after_index);
+                        callstack.push(M{
+                            after: after_index,
+                            before: after_index - 1,
+                            first: after_index - 2,
+                            last: after_index + 1,
+                            to_link: after_index + 1,
+                        });
                     }
                     '[' => {
                         state_stack.push(ParseMode::SquareBrackets(vec![], 1));
@@ -142,86 +158,122 @@ fn parse(mut string: Vec<char>) -> Vec<Node> {
                     '|' => {
                         // println!("Before | Operator {:?}", callstack);
                         let after_index = upcoming_transition_stack.last().unwrap();
-                        let current_last_node_index = callstack.last().unwrap();
-                        let current_node = node_vec.get_mut(*current_last_node_index).unwrap();
+                        let current_last_node_index = callstack.pop().unwrap().idx();
+                        let current_node = node_vec.get_mut(current_last_node_index).unwrap();
                         current_node.push_child(*after_index);
-                        callstack.pop();
                         callstack.push(*callstack.last().unwrap());
                         // println!("After | Operator {:?}", callstack);
                     }
                     '+' => {
-                        // if previous_char_is_closing_bracket(&string_index, &string) {
-                        if closing_bracket {
-                            // println!("hi");
-                            let last_node_index = callstack.last().unwrap();
-                            let after = node_vec.get_mut(*last_node_index).unwrap();
-                            let before_index = last_node_index - 1;
-                            after.push_child(before_index);
-                        } else {
-                            // println!("hey");
-                            let x = callstack.last().unwrap().clone();
-                            let node = node_vec.get_mut(x).unwrap();
-                            node.push_child(x);
+                        let possessive = string_index < string.len() - 1 && '+' == string[string_index + 1] && !check_if_escaped(&string, string_index + 1);
+                        let lazy = string_index < string.len() - 1 && '?' == string[string_index + 1] && !check_if_escaped(&string, string_index + 1);
+                        if lazy || possessive {
+                            string_index += 1;
+                        }
+
+                        match callstack.last().unwrap() {
+                            S(x) => {
+                                if possessive {
+                                    let mut last_node = node_vec.pop().unwrap();
+                                    last_node.get_children_mut().unwrap().clear();
+                                    let len = node_vec.len();
+                                    last_node.push_child(len + 1);
+                                    last_node.push_child(len + 2);
+                                    let v = vec![Node::StartAtomic {children: vec![len + 1]}, last_node, Node::EndAtomic {children: vec![]}];
+                                    node_vec.extend(v);
+                                    callstack.pop();
+                                    callstack.push(S(node_vec.len() - 1));
+                                } else {
+                                    let i = *x;
+                                    if lazy {
+                                        add_node(Node::new_transition(), node_vec, &mut callstack);
+                                    }
+                                    node_vec.get_mut(i).unwrap().push_child(i)
+                                }
+                            },
+                            M {before, after, first, last, ..} =>  {node_vec.get_mut(*after).unwrap().lazy_dependent_insert(*before, lazy);
+                                if possessive {
+                                    node_vec.get_mut(*first).unwrap().to_start_atomic();
+                                    node_vec.get_mut(*last).unwrap().to_end_atomic();
+                                }
+                            },
                         }
                     }
                     '*' => {
-                        // if previous_char_is_closing_bracket(&string_index, &string) {
-                        if closing_bracket {
-                            let last_node_index = callstack.pop().unwrap();
-                            let after = node_vec.get_mut(last_node_index).unwrap();
-                            let before_index = last_node_index - 1;
-                            after.push_child(before_index);
-                            callstack.push(before_index);
-                        } else {
-                            let last_node_index = callstack.pop().unwrap();
-                            let mut node = node_vec.get(last_node_index).unwrap().clone();
-                            let mut new_transition = Node::new_transition();
-                            node.push_child(last_node_index);
-                            node_vec.push(node);
-                            match new_transition {
-                                Node::Transition { ref mut children, .. } => {
-                                    children.push(last_node_index + 1);
+                        let possessive = string_index < string.len() - 1 && '+' == string[string_index + 1] && !check_if_escaped(&string, string_index + 1);
+                        let lazy = string_index < string.len() - 1 && '?' == string[string_index + 1] && !check_if_escaped(&string, string_index + 1);
+                        if lazy || possessive {
+                            string_index += 1;
+                        }
+
+                        match callstack.last().unwrap() {
+                            S(last_node_index) => {
+                                if possessive {
+                                    let mut last_node = node_vec.pop().unwrap();
+                                    last_node.get_children_mut().unwrap().clear();
+                                    let len = node_vec.len();
+                                    last_node.push_child(len + 1);
+                                    last_node.push_child(len + 2);
+                                    let v = vec![Node::StartAtomic {children: vec![len + 1, len + 2]}, last_node, Node::EndAtomic {children: vec![]}];
+                                    node_vec.extend(v);
+                                    callstack.pop();
+                                    callstack.push(S(node_vec.len() - 1));
+                                } else {
+                                    let mut node = node_vec.get(*last_node_index).unwrap().clone();
+                                    let mut new_transition = Node::new_transition();
+                                    node.push_child(*last_node_index);
+                                    node_vec.push(node);
+                                    match new_transition {
+                                        Node::Transition { ref mut children, .. } => {
+                                            children.push(last_node_index + 1);
+                                        }
+                                        _ => panic!("Something went wrong here"),
+                                    }
+                                    node_vec[*last_node_index] = new_transition;
                                 }
-                                _ => panic!("Something went wrong here"),
                             }
-                            node_vec[last_node_index] = new_transition;
-                            callstack.push(last_node_index);
+                            M {first, after, last, before, ..} => {
+                                node_vec.get_mut(*first).unwrap().lazy_dependent_insert(*last, lazy);
+                                node_vec.get_mut(*after).unwrap().lazy_dependent_insert(*before, lazy);
+                                if possessive {
+                                    node_vec.get_mut(*first).unwrap().to_start_atomic();
+                                    node_vec.get_mut(*last).unwrap().to_end_atomic();
+                                }
+                            }
                         }
                     }
                     '^' => add_node(Node::new_start_of_line(), node_vec, &mut callstack),
                     '$' => add_node(Node::new_end_of_line(), node_vec, &mut callstack),
                     '.' => add_node(Node::new_match_all(), node_vec, &mut callstack),
                     '?' => {
-                        if ['+', '*'].contains(&string[string_index - 1]) && !check_if_escaped(&string, string_index - 1) {
-                            let new_node = Node::new_transition();
-                            let new_node_index = node_vec.len();
-                            node_vec.push(new_node);
-                            let last_index = callstack.pop().unwrap();
-                            callstack.push(new_node_index);
-                            node_vec.get_mut(last_index).unwrap().insert_child(new_node_index);
-                        } else {
-                            if closing_bracket {
-                                let before_index = callstack.last().unwrap() - 1;
-                                let after_index = callstack.last().unwrap().clone();
-                                let before = node_vec.get_mut(before_index).unwrap();
-                                before.push_child(after_index);
-                            } else {
+                        let possessive = string_index < string.len() - 1 && '+' == string[string_index + 1] && !check_if_escaped(&string, string_index + 1);
+                        let lazy = string_index < string.len() - 1 && '?' == string[string_index + 1] && !check_if_escaped(&string, string_index + 1);
+                        if lazy || possessive {
+                            string_index += 1;
+                        }
+
+                        match callstack.last().unwrap() {
+                            S(n) => {
                                 let mut new_transition1 = Node::new_transition();
-                                let new_transition2 = Node::new_transition();
-                                let old = callstack.pop().unwrap();
+                                let mut new_transition2 = Node::new_transition();
+                                let old = callstack.pop().unwrap().idx();
                                 let mut old_node = node_vec.get(old).unwrap().clone();
-                                match new_transition1 {
-                                    Node::Transition { ref mut children } => {
-                                        children.push(node_vec.len());
-                                        children.push(node_vec.len() + 1);
-                                    }
-                                    _ => panic!(),
+                                new_transition1.push_child(node_vec.len());
+                                new_transition1.lazy_dependent_insert(node_vec.len() + 1, lazy);
+
+                                if possessive {
+                                    new_transition1.to_start_atomic();
+                                    new_transition2.to_end_atomic();
                                 }
+
                                 node_vec[old] = new_transition1;
                                 old_node.push_child(node_vec.len() + 1);
                                 node_vec.push(old_node);
                                 node_vec.push(new_transition2);
-                                callstack.push(node_vec.len() - 1);
+                                callstack.push(S(node_vec.len() - 1));
+                            },
+                            M{first, last, ..} => {
+                                node_vec.get_mut(*first).unwrap().push_child(*last);
                             }
                         }
                     }
@@ -272,13 +324,20 @@ fn parse(mut string: Vec<char>) -> Vec<Node> {
                 if character == '}' {
                     string.remove(string_index);
                     let lazy: bool;
-                    if string_index < string.len() && string[string_index] == '?' {
+                    let possessive: bool;
+                    if string_index < string.len() && string[string_index] == '+' {
+                        possessive = true;
+                        lazy = false;
+                    }
+                    else if string_index < string.len() && string[string_index] == '?' {
                         lazy = true;
+                        possessive = false;
                         string_index += 1;
                     } else {
                         lazy = false;
+                        possessive = false;
                     }
-                    parse_curly_brackets(&expr, closing_bracket, node_vec, &mut callstack, lazy);
+                    parse_curly_brackets(&expr, node_vec, &mut callstack, lazy, possessive);
                     string_index -= 1;
                     state_stack.pop();
                 } else {
@@ -294,7 +353,7 @@ fn parse(mut string: Vec<char>) -> Vec<Node> {
                 }
                 if character == ']' {
                     if !check_if_escaped(&string, string_index) {
-                        closing_bracket = parse_square_brackets(expr, node_vec, &mut callstack);
+                        parse_square_brackets(expr, node_vec, &mut callstack);
                         state_stack.pop();
                         string_index += 1;
                         continue;
@@ -307,10 +366,11 @@ fn parse(mut string: Vec<char>) -> Vec<Node> {
             }
         }
         string_index += 1;
-        closing_bracket = false;
     }
     let index = callstack.last().unwrap();
-    let x = node_vec.get_mut(*index).unwrap();
-    x.push_child(1);
+    node_vec.get_mut(index.idx()).unwrap().push_child(1);
+    // for (index, node) in node_vec.iter_mut().enumerate() {
+    //     println!("{} --- {:?}", index, node);
+    // }
     return _node_vec;
 }

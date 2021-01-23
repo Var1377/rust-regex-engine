@@ -15,7 +15,7 @@ impl Regex {
                 return backtrack_pure_match(&self.node_vec, string.as_bytes(), self.root_node_idx, callstack, &self.optimized_root_node);
             }
             MatchingEngine::ParallelNFA {} => {
-                return parallel_nfa::pure_match(&self.node_vec, string.as_bytes(), self.root_node_idx);
+                return parallel_nfa::pure_match(&self.node_vec, string.as_bytes(), self.root_node_idx, &self.optimized_root_node);
             }
             _ => unimplemented!(),
         };
@@ -25,17 +25,17 @@ impl Regex {
         return self.is_match(string);
     }
 
-    pub fn first_match(&self, string: &str) -> Option<(usize, usize)> {
-        match self.engine.lock().unwrap().deref_mut() {
-            MatchingEngine::Backtrack { callstack, backref_data: _ } => {
-                return backtrack_first_match(&self.node_vec, string.as_bytes(), self.root_node_idx, callstack, &self.optimized_root_node);
-            }
-            MatchingEngine::ParallelNFA {} => {
-                return parallel_nfa::index_match(&self.node_vec, string.as_bytes(), self.root_node_idx);
-            }
-            _ => unimplemented!(),
-        };
-    }
+    // pub fn first_match(&self, string: &str) -> Option<(usize, usize)> {
+    //     match self.engine.lock().unwrap().deref_mut() {
+    //         MatchingEngine::Backtrack { callstack, backref_data: _ } => {
+    //             return backtrack_first_match(&self.node_vec, string.as_bytes(), self.root_node_idx, callstack, &self.optimized_root_node);
+    //         }
+    //         MatchingEngine::ParallelNFA {} => {
+    //             return parallel_nfa::index_match(&self.node_vec, string.as_bytes(), self.root_node_idx);
+    //         }
+    //         _ => unimplemented!(),
+    //     };
+    // }
 
     pub fn match_indices(&self, string: &str) -> Vec<(usize, usize)> {
         match self.engine.lock().unwrap().deref_mut() {
@@ -45,7 +45,7 @@ impl Regex {
                 return backtrack_match_indices(&self.node_vec, string.as_bytes(), self.root_node_idx, callstack, &self.optimized_root_node);
             }
             MatchingEngine::ParallelNFA {} => {
-                return parallel_nfa::indices_match(&self.node_vec, string.as_bytes(), self.root_node_idx);
+                return parallel_nfa::indices_match(&self.node_vec, string.as_bytes(), self.root_node_idx, &self.optimized_root_node);
             }
             _ => unimplemented!(),
         };

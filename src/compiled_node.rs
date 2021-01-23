@@ -15,7 +15,7 @@ impl Offset for Vec<usize> {
 }
 
 // Faster and more memory efficient
-// to put the enum in a tree like structure to reduce the number of branches in a wworst-case scenario
+// to put the enum in a tree like structure to reduce the number of branches in a worst-case scenario
 #[derive(Clone, Debug)]
 pub(crate) struct CompiledNode {
     pub node: CNode,
@@ -48,6 +48,8 @@ pub(crate) enum BehaviourNode {
 #[derive(Clone, Debug)]
 pub(crate) enum SpecialNode {
     DropStack,
+    StartAtomic,
+    EndAtomic,
     GlobalRecursion,
     Subroutine,
     StartLookAhead,
@@ -91,51 +93,51 @@ pub(crate) enum AnchorNode {
 }
 
 impl AnchorNode {
-    pub fn is_match_chars(&self, index: usize, string: &[char]) -> bool {
-        return match self {
-            Self::StartOfString => index == 0,
-            Self::EndOfString => index == string.len(),
-            Self::BeginningOfLine => index == 0 || unsafe { string.get_unchecked(index - 1) } == &'\n',
-            Self::EndOfLine => index == string.len() || unsafe { string.get_unchecked(index) } == &'\n',
-            Self::WordBoundary => {
-                (index == 0 && string.get(index).map(|c| c._is_alphanumeric()).is_true())
-                    || (index == string.len() && string.get(index - 1).map(|c| c._is_alphanumeric()).is_true())
-                    || (string.get(index - 1).map(|c| c._is_alphanumeric()).is_true() && string.get(index).map(|c| c._is_alphanumeric()).is_false())
-                    || (string.get(index).map(|c| c._is_alphanumeric()).is_true() && string.get(index - 1).map(|c| c._is_alphanumeric()).is_false())
-            }
-            Self::NotWordBoundary => {
-                !((index == 0 && string.get(index).map(|c| c._is_alphanumeric()).is_true())
-                    || (index == string.len() && string.get(index - 1).map(|c| c._is_alphanumeric()).is_true())
-                    || (string.get(index - 1).map(|c| c._is_alphanumeric()).is_true() && string.get(index).map(|c| c._is_alphanumeric()).is_false())
-                    || (string.get(index).map(|c| c._is_alphanumeric()).is_true() && string.get(index - 1).map(|c| c._is_alphanumeric()).is_false()))
-            }
-        };
-    }
+    // pub fn is_match_chars(&self, index: usize, string: &[char]) -> bool {
+    //     return match self {
+    //         Self::StartOfString => index == 0,
+    //         Self::EndOfString => index == string.len(),
+    //         Self::BeginningOfLine => index == 0 || unsafe { string.get_unchecked(index - 1) } == &'\n',
+    //         Self::EndOfLine => index == string.len() || unsafe { string.get_unchecked(index) } == &'\n',
+    //         Self::WordBoundary => {
+    //             (index == 0 && string.get(index).map(|c| c._is_alphanumeric()).is_true())
+    //                 || (index == string.len() && string.get(index - 1).map(|c| c._is_alphanumeric()).is_true())
+    //                 || (string.get(index - 1).map(|c| c._is_alphanumeric()).is_true() && string.get(index).map(|c| c._is_alphanumeric()).is_false())
+    //                 || (string.get(index).map(|c| c._is_alphanumeric()).is_true() && string.get(index - 1).map(|c| c._is_alphanumeric()).is_false())
+    //         }
+    //         Self::NotWordBoundary => {
+    //             !((index == 0 && string.get(index).map(|c| c._is_alphanumeric()).is_true())
+    //                 || (index == string.len() && string.get(index - 1).map(|c| c._is_alphanumeric()).is_true())
+    //                 || (string.get(index - 1).map(|c| c._is_alphanumeric()).is_true() && string.get(index).map(|c| c._is_alphanumeric()).is_false())
+    //                 || (string.get(index).map(|c| c._is_alphanumeric()).is_true() && string.get(index - 1).map(|c| c._is_alphanumeric()).is_false()))
+    //         }
+    //     };
+    // }
 
-    pub fn is_match_char_indices(&self, index: usize, string: &[(usize, char)]) -> bool {
-        return match self {
-            Self::StartOfString => index == 0,
-            Self::EndOfString => index == string.len(),
-            Self::BeginningOfLine => index == 0 || unsafe { string.get_unchecked(index - 1).1 } == '\n',
-            Self::EndOfLine => index == string.len() || unsafe { string.get_unchecked(index).1 } == '\n',
-            Self::WordBoundary => {
-                (index == 0 && string.get(index).map(|c| c.1._is_alphanumeric()).is_true())
-                    || (index == string.len() && string.get(index - 1).map(|c| c.1._is_alphanumeric()).is_true())
-                    || (string.get(index - 1).map(|c| c.1._is_alphanumeric()).is_true()
-                        && string.get(index).map(|c| c.1._is_alphanumeric()).is_false())
-                    || (string.get(index).map(|c| c.1._is_alphanumeric()).is_true()
-                        && string.get(index - 1).map(|c| c.1._is_alphanumeric()).is_false())
-            }
-            Self::NotWordBoundary => {
-                !((index == 0 && string.get(index).map(|c| c.1._is_alphanumeric()).is_true())
-                    || (index == string.len() && string.get(index - 1).map(|c| c.1._is_alphanumeric()).is_true())
-                    || (string.get(index - 1).map(|c| c.1._is_alphanumeric()).is_true()
-                        && string.get(index).map(|c| c.1._is_alphanumeric()).is_false())
-                    || (string.get(index).map(|c| c.1._is_alphanumeric()).is_true()
-                        && string.get(index - 1).map(|c| c.1._is_alphanumeric()).is_false()))
-            }
-        };
-    }
+    // pub fn is_match_char_indices(&self, index: usize, string: &[(usize, char)]) -> bool {
+    //     return match self {
+    //         Self::StartOfString => index == 0,
+    //         Self::EndOfString => index == string.len(),
+    //         Self::BeginningOfLine => index == 0 || unsafe { string.get_unchecked(index - 1).1 } == '\n',
+    //         Self::EndOfLine => index == string.len() || unsafe { string.get_unchecked(index).1 } == '\n',
+    //         Self::WordBoundary => {
+    //             (index == 0 && string.get(index).map(|c| c.1._is_alphanumeric()).is_true())
+    //                 || (index == string.len() && string.get(index - 1).map(|c| c.1._is_alphanumeric()).is_true())
+    //                 || (string.get(index - 1).map(|c| c.1._is_alphanumeric()).is_true()
+    //                     && string.get(index).map(|c| c.1._is_alphanumeric()).is_false())
+    //                 || (string.get(index).map(|c| c.1._is_alphanumeric()).is_true()
+    //                     && string.get(index - 1).map(|c| c.1._is_alphanumeric()).is_false())
+    //         }
+    //         Self::NotWordBoundary => {
+    //             !((index == 0 && string.get(index).map(|c| c.1._is_alphanumeric()).is_true())
+    //                 || (index == string.len() && string.get(index - 1).map(|c| c.1._is_alphanumeric()).is_true())
+    //                 || (string.get(index - 1).map(|c| c.1._is_alphanumeric()).is_true()
+    //                     && string.get(index).map(|c| c.1._is_alphanumeric()).is_false())
+    //                 || (string.get(index).map(|c| c.1._is_alphanumeric()).is_true()
+    //                     && string.get(index - 1).map(|c| c.1._is_alphanumeric()).is_false()))
+    //         }
+    //     };
+    // }
 
     pub fn is_match_bytes(&self, index: usize, length: usize, current_char: Option<char>, previous_char: Option<char>) -> bool {
         return match self {
@@ -225,7 +227,7 @@ impl CompiledNode {
             }
         }
 
-        let mut flag = EngineFlag::Backtrack;
+        let mut flag = EngineFlag::Other;
 
         for (i, node) in nodes.into_iter().enumerate() {
             if referenced.contains(&i) {
@@ -236,9 +238,6 @@ impl CompiledNode {
                 }
             }
         }
-
-        // println!("{:?}", cnodes);
-        // println!("{:?}", flag);
         (cnodes, start, flag)
     }
 }
@@ -277,11 +276,6 @@ pub trait Find<T> {
 
 impl Find<char> for Vec<(char, char)> {
     fn find(&self, target: &char) -> bool {
-        // if *target < self.first().unwrap().0 || *target > self.last().unwrap().1 {
-        //     return false;
-        // }
-        // return self.iter().find(|(start,end)| target >= start && target <= end).is_some();
-
         return self
             .binary_search_by(|(start, end)| {
                 use std::cmp::Ordering::*;
@@ -300,22 +294,22 @@ impl Find<char> for Vec<(char, char)> {
 impl MatchNode {
     #[inline]
     pub fn is_match(&self, character: &char) -> bool {
-        match self {
+       match self {
             MatchNode::One(match_node) => {
                 use self::One::*;
                 match match_node {
-                    MatchOne(c) => return c == character,
-                    NotMatchOne(c) => return c != character,
-                    MatchAll => return true,
+                    MatchOne(c) => c == character,
+                    NotMatchOne(c) => c != character,
+                    MatchAll => true,
                 }
             }
             MatchNode::Range(match_node) => {
                 use self::Range::*;
                 match match_node {
-                    Inclusive(chars) => return chars.contains(character),
-                    Exclusive(chars) => return !chars.contains(character),
-                    InclusiveRange(characters) => return characters.find(character),
-                    ExclusiveRange(characters) => return characters.find(character),
+                    Inclusive(chars) => chars.contains(character),
+                    Exclusive(chars) => !chars.contains(character),
+                    InclusiveRange(characters) => characters.find(character),
+                    ExclusiveRange(characters) => characters.find(character),
                 }
             }
         }

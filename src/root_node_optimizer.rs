@@ -15,7 +15,7 @@ pub(crate) struct RootNode {
 
 impl RootNode {
     pub fn generate(nodes: &[CompiledNode], start: usize, children: Option<usize>) -> Option<Self> {
-        let start_node = nodes.get(start).unwrap();
+        let start_node = nodes.get(start)?;
 
         use CNode::*;
         match &start_node.node {
@@ -150,6 +150,7 @@ impl RootNode {
         }
     }
 
+    #[inline(always)]
     pub fn run(&self, string: &[u8], mut index: usize) -> Option<usize> /* String index */ {
         use crate::utf_8::*;
         use CNode::*;
@@ -260,166 +261,164 @@ impl RootNode {
                 }
                 return None;
             }
-            Anchor(anchor_node) => {
-                match anchor_node {
-                    AnchorNode::WordBoundary => {
-                        if index > string.len() {
-                            return None;
-                        }
-                        let character = decode_utf8(&string[index..]);
-                        if index == 0 {
-                            if let Some((character, len)) = character {
-                                if character._is_alphanumeric() {
-                                    return Some(0);
-                                } else {
-                                    index += len;
-                                }
-                            } else {
-                                return None;
-                            }
-                        }
-
-                        let mut last_character = decode_last_utf8(&string[..index]);
-                        while index < string.len() {
-                            if let Some((new_character, len)) = decode_utf8(&string[index..]) {
-                                if let Some((last_character, _)) = last_character {
-                                    if (new_character._is_alphanumeric() && !last_character._is_alphanumeric())
-                                        || (!new_character._is_alphanumeric() && last_character._is_alphanumeric())
-                                    {
-                                        return Some(index);
-                                    }
-                                } else if let Some((last_character, _)) = decode_last_utf8(&string[..index]) {
-                                    if (new_character._is_alphanumeric() && !last_character._is_alphanumeric())
-                                        || (!new_character._is_alphanumeric() && last_character._is_alphanumeric())
-                                    {
-                                        return Some(index);
-                                    }
-                                } else {
-                                    return None;
-                                }
-                                index += len;
-                                last_character = Some((new_character, len));
-                            } else {
-                                return None;
-                            }
-                        }
-                        if index == string.len() {
-                            if let Some((c, _)) = last_character {
-                                if c._is_alphanumeric() {
-                                    return Some(index);
-                                }
-                            }
-                            return None;
-                        }
+            Anchor(anchor_node) => match anchor_node {
+                AnchorNode::WordBoundary => {
+                    if index > string.len() {
+                        return None;
                     }
-                    AnchorNode::NotWordBoundary => {
-                        if index > string.len() {
-                            return None;
-                        }
-                        let character = decode_utf8(&string[index..]);
-                        if index == 0 {
-                            if let Some((character, len)) = character {
-                                if !character._is_alphanumeric() {
-                                    return Some(0);
-                                } else {
-                                    index += len;
-                                }
+                    let character = decode_utf8(&string[index..]);
+                    if index == 0 {
+                        if let Some((character, len)) = character {
+                            if character._is_alphanumeric() {
+                                return Some(0);
                             } else {
-                                return None;
-                            }
-                        }
-
-                        let mut last_character = decode_last_utf8(&string[..index]);
-                        while index < string.len() {
-                            if let Some((new_character, len)) = decode_utf8(&string[index..]) {
-                                if let Some((last_character, _)) = last_character {
-                                    if !((new_character._is_alphanumeric() && !last_character._is_alphanumeric())
-                                        || (!new_character._is_alphanumeric() && last_character._is_alphanumeric()))
-                                    {
-                                        return Some(index);
-                                    }
-                                } else if let Some((last_character, _)) = decode_last_utf8(&string[..index]) {
-                                    if !((new_character._is_alphanumeric() && !last_character._is_alphanumeric())
-                                        || (!new_character._is_alphanumeric() && last_character._is_alphanumeric()))
-                                    {
-                                        return Some(index);
-                                    }
-                                } else {
-                                    return None;
-                                }
                                 index += len;
-                                last_character = Some((new_character, len));
-                            } else {
-                                return None;
                             }
-                        }
-                        if index == string.len() {
-                            if let Some((c, _)) = last_character {
-                                if !c._is_alphanumeric() {
-                                    return Some(index);
-                                }
-                            }
-                            return None;
-                        }
-                    }
-                    AnchorNode::StartOfString => {
-                        if index == 0 {
-                            return Some(0);
                         } else {
                             return None;
                         }
                     }
-                    AnchorNode::EndOfString => {
-                        if index <= string.len() {
-                            return Some(string.len());
+
+                    let mut last_character = decode_last_utf8(&string[..index]);
+                    while index < string.len() {
+                        if let Some((new_character, len)) = decode_utf8(&string[index..]) {
+                            if let Some((last_character, _)) = last_character {
+                                if (new_character._is_alphanumeric() && !last_character._is_alphanumeric())
+                                    || (!new_character._is_alphanumeric() && last_character._is_alphanumeric())
+                                {
+                                    return Some(index);
+                                }
+                            } else if let Some((last_character, _)) = decode_last_utf8(&string[..index]) {
+                                if (new_character._is_alphanumeric() && !last_character._is_alphanumeric())
+                                    || (!new_character._is_alphanumeric() && last_character._is_alphanumeric())
+                                {
+                                    return Some(index);
+                                }
+                            } else {
+                                return None;
+                            }
+                            index += len;
+                            last_character = Some((new_character, len));
                         } else {
                             return None;
                         }
                     }
-                    AnchorNode::BeginningOfLine => {
-                        if index == 0 {
-                            return Some(0);
+                    if index == string.len() {
+                        if let Some((c, _)) = last_character {
+                            if c._is_alphanumeric() {
+                                return Some(index);
+                            }
                         }
-                        let mut last_character: Option<(char, usize)> = None;
-                        while index < string.len() {
-                            if let Some((character, _)) = last_character {
-                                if character == '\n' {
-                                    return Some(index);
-                                }
-                            } else if let Some((character, _)) = decode_last_utf8(&string[..index]) {
-                                if character == '\n' {
-                                    return Some(index);
-                                }
+                        return None;
+                    }
+                }
+                AnchorNode::NotWordBoundary => {
+                    if index > string.len() {
+                        return None;
+                    }
+                    let character = decode_utf8(&string[index..]);
+                    if index == 0 {
+                        if let Some((character, len)) = character {
+                            if !character._is_alphanumeric() {
+                                return Some(0);
                             } else {
-                                return None;
+                                index += len;
                             }
-
-                            if let Some(t) = decode_utf8(&string[index..]) {
-                                index += t.1;
-                                last_character = Some(t);
-                            } else {
-                                return None;
-                            }
+                        } else {
+                            return None;
                         }
                     }
-                    AnchorNode::EndOfLine => {
-                        if index == string.len() {
-                            return Some(string.len());
-                        }
-                        while index < string.len() {
-                            if let Some((character, len)) = decode_utf8(&string[..index]) {
-                                if character == '\n' {
+
+                    let mut last_character = decode_last_utf8(&string[..index]);
+                    while index < string.len() {
+                        if let Some((new_character, len)) = decode_utf8(&string[index..]) {
+                            if let Some((last_character, _)) = last_character {
+                                if !((new_character._is_alphanumeric() && !last_character._is_alphanumeric())
+                                    || (!new_character._is_alphanumeric() && last_character._is_alphanumeric()))
+                                {
                                     return Some(index);
-                                } else {
-                                    index += len;
+                                }
+                            } else if let Some((last_character, _)) = decode_last_utf8(&string[..index]) {
+                                if !((new_character._is_alphanumeric() && !last_character._is_alphanumeric())
+                                    || (!new_character._is_alphanumeric() && last_character._is_alphanumeric()))
+                                {
+                                    return Some(index);
                                 }
                             } else {
                                 return None;
                             }
+                            index += len;
+                            last_character = Some((new_character, len));
+                        } else {
+                            return None;
+                        }
+                    }
+                    if index == string.len() {
+                        if let Some((c, _)) = last_character {
+                            if !c._is_alphanumeric() {
+                                return Some(index);
+                            }
+                        }
+                        return None;
+                    }
+                }
+                AnchorNode::StartOfString => {
+                    if index == 0 {
+                        return Some(0);
+                    } else {
+                        return None;
+                    }
+                }
+                AnchorNode::EndOfString => {
+                    if index <= string.len() {
+                        return Some(string.len());
+                    } else {
+                        return None;
+                    }
+                }
+                AnchorNode::BeginningOfLine => {
+                    if index == 0 {
+                        return Some(0);
+                    }
+                    let mut last_character: Option<(char, usize)> = None;
+                    while index < string.len() {
+                        if let Some((character, _)) = last_character {
+                            if character == '\n' {
+                                return Some(index);
+                            }
+                        } else if let Some((character, _)) = decode_last_utf8(&string[..index]) {
+                            if character == '\n' {
+                                return Some(index);
+                            }
+                        } else {
+                            return None;
+                        }
+
+                        if let Some(t) = decode_utf8(&string[index..]) {
+                            index += t.1;
+                            last_character = Some(t);
+                        } else {
+                            return None;
                         }
                     }
                 }
-            }
+                AnchorNode::EndOfLine => {
+                    if index == string.len() {
+                        return Some(string.len());
+                    }
+                    while index < string.len() {
+                        if let Some((character, len)) = decode_utf8(&string[..index]) {
+                            if character == '\n' {
+                                return Some(index);
+                            } else {
+                                index += len;
+                            }
+                        } else {
+                            return None;
+                        }
+                    }
+                }
+            },
             _ => unreachable!("Only match and anchor nodes supported in the root node"),
         }
         None

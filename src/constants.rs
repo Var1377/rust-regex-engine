@@ -24,3 +24,11 @@ pub const W_BYTES: [u8; 63] = [
     b'O', b'P', b'Q', b'R', b'S', b'T', b'U', b'V', b'W', b'X', b'Y', b'Z', b'_', b'a', b'b', b'c', b'd', b'e', b'f', b'g', b'h', b'i', b'j', b'k',
     b'l', b'm', b'n', b'o', b'p', b'q', b'r', b's', b't', b'u', b'v', b'w', b'x', b'y', b'z',
 ];
+
+pub fn d() -> Vec<(char, char)> {
+    vec![('0','9')]
+}
+
+pub fn w() -> Vec<(char, char)> {
+    vec![('0','9'), ('A', 'Z'), ('_', '_'), ('a', 'z')]
+}

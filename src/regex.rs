@@ -64,7 +64,7 @@ pub enum EngineFlag {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum MatchingEngine {
     Backtrack {
-        callstack: Vec<(usize, usize, usize)>,
+        callstack: Vec<crate::backtrack_matcher::BackTrackToken>,
         backref_data: FxHashMap<String, u32>,
     },
     HybridAutomata {},
